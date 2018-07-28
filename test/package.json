@@ -1,0 +1,15 @@
+{
+  "name": "tests-and-benchmarks",
+  "version": "0.0.0",
+  "description": "nice-emitter tests and benchmarks",
+  "main": "test.js",
+  "scripts": {
+    "benchmark": "node ./benchmark.js"
+  },
+  "repository": "kubicle/nice-emitter",
+  "author": "kubicle",
+  "license": "MIT",
+  "dependencies": {
+    "eventemitter3": "latest"
+  }
+}

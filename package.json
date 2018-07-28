@@ -1,0 +1,30 @@
+{
+    "name": "nice-emitter",
+    "version": "0.1.0",
+    "description": "Yet another EventEmitter, with features to help you get things right faster.",
+    "main": "index.js",
+    "repository": {
+        "type": "git",
+        "url": "git://github.com/kubicle/nice-emitter.git"
+    },
+    "scripts": {
+      "benchmark": "node ./test/benchmark.js",
+      "test": "node ./test/test.js"
+    },
+    "keywords": [
+        "EventEmitter",
+        "EventEmitter3",
+        "Events",
+        "addEventListener",
+        "addListener",
+        "emit",
+        "emits",
+        "emitter",
+        "event",
+        "pub/sub",
+        "publish",
+        "subscribe"
+    ],
+    "author": "kubicle",
+    "license": "MIT"
+  }
