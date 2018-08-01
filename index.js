@@ -138,13 +138,17 @@ EventEmitter.prototype.forgetListener = function (listener) {
 
 EventEmitter.prototype.setListenerMaxCount = function (maxCount, listener) {
     if (debugLevel === 0) return;
-    if (!(maxCount > 0) || !listener) return throwOrConsole('Invalid parameters to emitter.setListenerMaxCount: ', maxCount + ', ' + listener);
+    if (!(maxCount > 0) || !listener) {
+        return throwOrConsole('Invalid parameters to emitter.setListenerMaxCount: ', maxCount + ', ' + listener);
+    }
     this._maxCountPerListenerKey[getObjectClassname(listener)] = maxCount;
 };
 // Old API compatibility
 EventEmitter.prototype.setMaxListeners = function (maxCount) {
     if (debugLevel === 0) return;
-    if (!(maxCount > 0) || arguments.length > 1) return throwOrConsole('Invalid parameters to emitter.setMaxListeners: ', maxCount + ', ' + arguments[1]);
+    if (!(maxCount > 0) || arguments.length > 1) {
+        return throwOrConsole('Invalid parameters to emitter.setMaxListeners: ', maxCount + (arguments[1] !== undefined ? ', ' + arguments[1] : ''));
+    }
     this._maxCountPerListenerKey[DEFAULT_LISTENER] = maxCount;
 };
 
