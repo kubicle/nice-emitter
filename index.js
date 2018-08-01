@@ -227,7 +227,6 @@ ListenerList.prototype.removeListener = function (index, listener) {
 ListenerList.prototype.countListener = function (context, listener) {
     var listenerKey = getObjectClassname(listener);
     var currentCount = (this.counterMap[listenerKey] || 0) + 1;
-    this.counterMap[listenerKey] = currentCount;
     var maxListenerCount = this.emitter._maxCountPerListenerKey[listenerKey] || 1;
     if (currentCount > maxListenerCount) {
         var msg = 'Too many listeners: ' + getAsText(this.emitter, this.eventId, listener) + '. ';
@@ -236,6 +235,7 @@ ListenerList.prototype.countListener = function (context, listener) {
             : 'Use ' + getObjectClassname(this.emitter) + '.setMaxListeners(n) with n >= ' + currentCount + '. Even better: specify your listeners when calling "on"';
         throwOrConsole(msg, advice); // if console we can continue below
     }
+    this.counterMap[listenerKey] = currentCount; // not done if exception above
     // Same listener should not listen twice to same event ID (does not apply to "undefined" listener)
     if (currentCount > 1 && this.count > 1 && context === listener && this.objects.indexOf(listener) !== -1) {
         throwOrConsole('Listener listens twice: ', getAsText(this.emitter, this.eventId, listener));
