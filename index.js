@@ -67,10 +67,26 @@ EventEmitter.prototype.emit = function (eventId, p1, p2, p3) {
 EventEmitter.prototype.makeQuickEmitFunction = function (eventId) {
     var listenerList = this._listenersPerEventId[eventId];
     if (listenerList === undefined) {
-        throw new Error('Undeclared event ID for ' + getObjectClassname(this) + ': ', eventId);
+        return throwOrConsole('Undeclared event ID for ' + getObjectClassname(this) + ': ', eventId);
     }
     var funcName = 'emit_' + eventId;
-    return this[funcName] || (this[funcName] = function () { listenerList.quickEmit(); });
+    var fn = this[funcName];
+    if (fn) return fn;
+
+    fn = this[funcName] = function (p1, p2, p3) {
+        if (listenerList.count === 0) return false; // 0 listeners
+
+        switch (arguments.length) {
+        case 0: return listenerList.emit0();
+        case 1: return listenerList.emit1(p1);
+        case 2: return listenerList.emit2(p1, p2);
+        case 3: return listenerList.emit3(p1, p2, p3);
+        default: return listenerList.emitN([].slice.call(arguments, 0));
+        }
+    };
+    // qe = listenerList.quickEmit;
+    // fn = this[funcName] = function () { return qe.apply(listenerList, arguments); };
+    return fn;
 };
 
 
@@ -242,17 +258,17 @@ ListenerList.prototype.countListener = function (context, listener) {
     }
 };
 
-ListenerList.prototype.quickEmit = function () {
-    if (this.count === 0) return false; // 0 listeners
+// ListenerList.prototype.quickEmit = function () {
+//     if (this.count === 0) return false; // 0 listeners
 
-    switch (arguments.length) {
-    case 0: return this.emit0();
-    case 1: return this.emit1(arguments[0]);
-    case 2: return this.emit2(arguments[0], arguments[1]);
-    case 3: return this.emit3(arguments[0], arguments[1], arguments[2]);
-    default: return this.emitN([].slice.call(arguments, 1));
-    }
-};
+//     switch (arguments.length) {
+//     case 0: return this.emit0();
+//     case 1: return this.emit1(arguments[0]);
+//     case 2: return this.emit2(arguments[0], arguments[1]);
+//     case 3: return this.emit3(arguments[0], arguments[1], arguments[2]);
+//     default: return this.emitN([].slice.call(arguments, 0));
+//     }
+// };
 
 ListenerList.prototype.emit0 = function () {
     if (debugLevel > 0) this.isEmitting = true;
