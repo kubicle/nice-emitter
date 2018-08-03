@@ -247,7 +247,7 @@ ListenerList.prototype.countListener = function (context, listener) {
     if (currentCount > maxListenerCount) {
         var msg = 'Too many listeners: ' + getAsText(this.emitter, this.eventId, listener) + '. ';
         var advice = listener
-            ? 'Use ' + getObjectClassname(this.emitter) + '.setListenerMaxCount(n, any ' + listenerKey + ') with n >= ' + currentCount
+            ? 'Use ' + getObjectClassname(this.emitter) + '.setListenerMaxCount(n, ' + listenerKey + ') with n >= ' + currentCount
             : 'Use ' + getObjectClassname(this.emitter) + '.setMaxListeners(n) with n >= ' + currentCount + '. Even better: specify your listeners when calling "on"';
         throwOrConsole(msg, advice); // if console we can continue below
     }
