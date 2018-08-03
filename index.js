@@ -105,16 +105,18 @@ EventEmitter.prototype.off = function (eventId, listener) {
     var listenerList = this._listenersPerEventId[eventId];
     if (!listenerList) return throwOrConsole('Invalid event ID: ', getAsText(this, eventId, listener));
 
-    // Old API compatibility
-    if (typeof listener === 'function') {
-        return this.removeListener(eventId, listener);
-    }
     if (debugLevel > 0 && !listener) {
         return throwOrConsole('Invalid parameter to emitter.off: \'', eventId + '\', ' + listener);
     }
 
-    var index = listenerList.findListener(listener);
-    if (index !== -1) listenerList.removeListener(index, listener);
+    if (typeof listener === 'function') {
+        // Old API compatibility
+        var indexFn = listenerList._findMethod(listener);
+        if (indexFn !== -1) listenerList._removeListener(indexFn, null);
+    } else {
+        var index = listenerList._findListener(listener);
+        if (index !== -1) listenerList._removeListener(index, listener);
+    }
 };
 
 // Old API compatibility - specifying your listeners when calling "on" is often much easier
