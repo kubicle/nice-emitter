@@ -53,14 +53,12 @@ EventEmitter.prototype.emit = function (eventId, p1, p2, p3) {
         return false;
     }
 
-    if (listenerList.count === 0) return false; // 0 listeners
-
     switch (arguments.length) {
     case 1: return listenerList.emit0();
     case 2: return listenerList.emit1(p1);
     case 3: return listenerList.emit2(p1, p2);
     case 4: return listenerList.emit3(p1, p2, p3);
-    default: return listenerList.emitN([].slice.call(arguments, 1));
+    default: return listenerList.emitN.apply(listenerList, [].slice.call(arguments, 1));
     }
 };
 
@@ -69,24 +67,7 @@ EventEmitter.prototype.makeQuickEmitFunction = function (eventId) {
     if (listenerList === undefined) {
         return throwOrConsole('Undeclared event ID for ' + getObjectClassname(this) + ': ', eventId);
     }
-    var funcName = 'emit_' + eventId;
-    var fn = this[funcName];
-    if (fn) return fn;
-
-    fn = this[funcName] = function (p1, p2, p3) {
-        if (listenerList.count === 0) return false; // 0 listeners
-
-        switch (arguments.length) {
-        case 0: return listenerList.emit0();
-        case 1: return listenerList.emit1(p1);
-        case 2: return listenerList.emit2(p1, p2);
-        case 3: return listenerList.emit3(p1, p2, p3);
-        default: return listenerList.emitN([].slice.call(arguments, 0));
-        }
-    };
-    // qe = listenerList.quickEmit;
-    // fn = this[funcName] = function () { return qe.apply(listenerList, arguments); };
-    return fn;
+    return listenerList;
 };
 
 
@@ -258,19 +239,8 @@ ListenerList.prototype.countListener = function (context, listener) {
     }
 };
 
-// ListenerList.prototype.quickEmit = function () {
-//     if (this.count === 0) return false; // 0 listeners
-
-//     switch (arguments.length) {
-//     case 0: return this.emit0();
-//     case 1: return this.emit1(arguments[0]);
-//     case 2: return this.emit2(arguments[0], arguments[1]);
-//     case 3: return this.emit3(arguments[0], arguments[1], arguments[2]);
-//     default: return this.emitN([].slice.call(arguments, 0));
-//     }
-// };
-
 ListenerList.prototype.emit0 = function () {
+    if (this.count === 0) return false; // 0 listeners
     if (debugLevel > 0) this.isEmitting = true;
 
     if (typeof this.methods === 'function') {
@@ -284,6 +254,7 @@ ListenerList.prototype.emit0 = function () {
 };
 
 ListenerList.prototype.emit1 = function (arg1) {
+    if (this.count === 0) return false; // 0 listeners
     if (debugLevel > 0) this.isEmitting = true;
 
     if (typeof this.methods === 'function') {
@@ -297,6 +268,7 @@ ListenerList.prototype.emit1 = function (arg1) {
 };
 
 ListenerList.prototype.emit2 = function (arg1, arg2) {
+    if (this.count === 0) return false; // 0 listeners
     if (debugLevel > 0) this.isEmitting = true;
 
     if (typeof this.methods === 'function') {
@@ -310,6 +282,7 @@ ListenerList.prototype.emit2 = function (arg1, arg2) {
 };
 
 ListenerList.prototype.emit3 = function (arg1, arg2, arg3) {
+    if (this.count === 0) return false; // 0 listeners
     if (debugLevel > 0) this.isEmitting = true;
 
     if (typeof this.methods === 'function') {
@@ -322,13 +295,14 @@ ListenerList.prototype.emit3 = function (arg1, arg2, arg3) {
     return true;
 };
 
-ListenerList.prototype.emitN = function (args) {
+ListenerList.prototype.emitN = function () {
+    if (this.count === 0) return false; // 0 listeners
     if (debugLevel > 0) this.isEmitting = true;
 
     if (typeof this.methods === 'function') {
-        this.methods.apply(this.objects, args);
+        this.methods.apply(this.objects, arguments);
     } else {
-        for (var i = 0; i < this.count; i++) { this.methods[i].apply(this.objects[i], args); }
+        for (var i = 0; i < this.count; i++) { this.methods[i].apply(this.objects[i], arguments); }
     }
 
     if (debugLevel > 0) this.isEmitting = false;
