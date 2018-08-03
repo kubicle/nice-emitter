@@ -253,7 +253,7 @@ ListenerList.prototype.countListener = function (context, listener) {
     }
     this.counterMap[listenerKey] = currentCount; // not done if exception above
     // Same listener should not listen twice to same event ID (does not apply to "undefined" listener)
-    if (currentCount > 1 && this.count > 1 && context === listener && this.objects.indexOf(listener) !== -1) {
+    if (currentCount >= 2 && this.count >= 1 && context === listener && this.findListener(listener) !== -1) {
         throwOrConsole('Listener listens twice: ', getAsText(this.emitter, this.eventId, listener));
     }
 };
