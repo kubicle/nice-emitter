@@ -89,9 +89,9 @@ EventEmitter.prototype.on = function (eventId, method, listener) {
         if (typeof method !== 'function' || typeof listener === 'function') {
             return throwOrConsole('Invalid parameters to emitter.on: \'', eventId + '\', ' + typeof method + ', ' + getObjectClassname(listener)), this;
         }
-        listenerList.countListener(listener || this, listener);
+        listenerList._countListener(listener || this, listener);
     }
-    listenerList.addListener(listener || this, method);
+    listenerList._addListener(listener || this, method);
     return this;
 };
 
@@ -125,8 +125,8 @@ EventEmitter.prototype.removeListener = function (eventId, fn) {
     var listenerList = this._listenersPerEventId[eventId];
     if (!listenerList) return throwOrConsole('Invalid event ID: ', getAsText(this, eventId));
 
-    var index = listenerList.findMethod(fn);
-    if (index !== -1) listenerList.removeListener(index, null);
+    var index = listenerList._findMethod(fn);
+    if (index !== -1) listenerList._removeListener(index, null);
 };
 
 EventEmitter.prototype.forgetListener = function (listener) {
@@ -154,6 +154,13 @@ EventEmitter.prototype.setMaxListeners = function (maxCount) {
 
 //--- Private helpers
 
+/**
+ * Internal implementation of a "single eventID" emitter to a list of listeners.
+ * A ListenerList can be returned to outside world for "quick emit" purpose.
+ *
+ * @param {EventEmitter} emitter
+ * @param {string} eventId
+ */
 function ListenerList (emitter, eventId) {
     this.methods = null; // null, function, or array of functions
     this.objects = null; // null, context, or array of contexts
@@ -167,7 +174,7 @@ function ListenerList (emitter, eventId) {
     }
 }
 
-ListenerList.prototype.addListener = function (context, method) {
+ListenerList.prototype._addListener = function (context, method) {
     if (typeof this.methods === 'function') {
         // 1 -> 2 # Array creation
         this.count = 2;
@@ -185,7 +192,7 @@ ListenerList.prototype.addListener = function (context, method) {
     }
 };
 
-ListenerList.prototype.findListener = function (listener) {
+ListenerList.prototype._findListener = function (listener) {
     if (typeof this.methods === 'function') {
         return this.objects === listener ? 0 : -1;
     } else {
@@ -193,7 +200,7 @@ ListenerList.prototype.findListener = function (listener) {
     }
 };
 
-ListenerList.prototype.findMethod = function (method) {
+ListenerList.prototype._findMethod = function (method) {
     if (typeof this.methods === 'function') {
         return this.methods === method ? 0 : -1;
     } else {
@@ -201,7 +208,7 @@ ListenerList.prototype.findMethod = function (method) {
     }
 };
 
-ListenerList.prototype.removeListener = function (index, listener) {
+ListenerList.prototype._removeListener = function (index, listener) {
     this.count--;
     if (typeof this.methods === 'function') {
         this.methods = null;
@@ -223,7 +230,7 @@ ListenerList.prototype.removeListener = function (index, listener) {
 };
 
 // Only used if debugLevel > 0
-ListenerList.prototype.countListener = function (context, listener) {
+ListenerList.prototype._countListener = function (context, listener) {
     var listenerKey = getObjectClassname(listener);
     var currentCount = (this.counterMap[listenerKey] || 0) + 1;
     var maxListenerCount = this.emitter._maxCountPerListenerKey[listenerKey] || 1;
@@ -236,7 +243,8 @@ ListenerList.prototype.countListener = function (context, listener) {
     }
     this.counterMap[listenerKey] = currentCount; // not done if exception above
     // Same listener should not listen twice to same event ID (does not apply to "undefined" listener)
-    if (currentCount >= 2 && this.count >= 1 && context === listener && this.findListener(listener) !== -1) {
+    // NB: this.count is not yet updated at this point, hence this.count >= 1 below (instead of 2)
+    if (currentCount >= 2 && this.count >= 1 && context === listener && this._findListener(listener) !== -1) {
         throwOrConsole('Listener listens twice: ', getAsText(this.emitter, this.eventId, listener));
     }
 };
