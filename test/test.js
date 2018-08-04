@@ -128,75 +128,240 @@ function basicTest () {
     });
 }
 
-function quickEmitTest () {
-    EventEmitter.setDebugLevel(EventEmitter.DEBUG_THROW);
+function slowEmitErrorTest () {
     var signaler = new MySignaler();
 
-    checkException('Undeclared event ID for MySignaler: signalXXX', function () {
-        signaler.makeQuickEmitFunction('signalXXX');
+    EventEmitter.setDebugLevel(EventEmitter.DEBUG_THROW);
+    checkException('Invalid event ID: MySignaler.on(\'signalXXX\', fn)', function () {
+        signaler.on('signalXXX', function () {});
     });
-    var fn = signaler.makeQuickEmitFunction('signal1');
-    checkResult(fn, signaler.emit_signal1);
-    checkResult(fn, signaler.makeQuickEmitFunction('signal1')); // returns same function
+    checkException('Invalid event ID: MySignaler.on(\'signalXXX\', fn, Object)', function () {
+        signaler.on('signalXXX', function () {}, {});
+    });
+    checkException('Invalid event ID: MySignaler.on(\'signalXXX\', fn, MySignaler)', function () {
+        signaler.on('signalXXX', function () {}, signaler);
+    });
+    checkException('Invalid event ID: MySignaler.on(\'signalXXX\', fn, Abc)', function () {
+        signaler.on('signalXXX', function () {}, 'Abc');
+    });
+    checkException('Invalid event ID: MySignaler.on(\'signalXXX\', fn, Number)', function () {
+        signaler.on('signalXXX', function () {}, 123); // number is not really a correct context but...
+    });
 
-    checkResult(false, signaler.emit_signal1('hello'));
+    EventEmitter.setDebugLevel(EventEmitter.DEBUG_ERROR);
+    signaler.on('signalXXX', function () {});
+    checkConsole('Invalid event ID: MySignaler.on(\'signalXXX\', fn)');
+    signaler.on('signalXXX', function () {}, {});
+    checkConsole('Invalid event ID: MySignaler.on(\'signalXXX\', fn, Object)');
+    signaler.on('signalXXX', function () {}, signaler);
+    checkConsole('Invalid event ID: MySignaler.on(\'signalXXX\', fn, MySignaler)');
+    signaler.on('signalXXX', function () {}, 'Abc');
+    checkConsole('Invalid event ID: MySignaler.on(\'signalXXX\', fn, Abc)');
+    signaler.on('signalXXX', function () {}, 123); // number is not really a correct context but...
+    checkConsole('Invalid event ID: MySignaler.on(\'signalXXX\', fn, Number)');
 
+    EventEmitter.setDebugLevel(EventEmitter.DEBUG_THROW);
+    checkException('Invalid parameters to emitter.on: \'signal1\', undefined, <default>', function () {
+        signaler.on('signal1', undefined);
+    });
+    checkException('Invalid parameters to emitter.on: \'signal1\', object, Function', function () {
+        signaler.on('signal1', signaler, function () {});
+    });
+
+    EventEmitter.setDebugLevel(EventEmitter.DEBUG_ERROR);
+    signaler.off('signalXXX', 'A');
+    checkConsole('Invalid event ID: MySignaler.on(\'signalXXX\', fn, A)');
+    signaler.off('signal1');
+    checkConsole('Invalid parameter to emitter.off: \'signal1\', undefined');
+
+    EventEmitter.setDebugLevel(EventEmitter.DEBUG_THROW);
+    signaler.setListenerMaxCount(2, 'A');
+    signaler.on('signal1', function () {}, 'A');
+    checkException('Listener listens twice: MySignaler.on(\'signal1\', fn, A)', function () {
+        signaler.on('signal1', function () {}, 'A');
+    });
+
+    checkException('Undeclared event ID for MySignaler: undefined', function () {
+        signaler.listenerCount();
+    });
+}
+
+function slowEmitTest () {
+    var signaler = new MySignaler();
+
+    checkResult(0, signaler.listenerCount('signal1'));
+    checkResult(false, signaler.emit('signal1'));
+    checkResult(false, signaler.emit('signal1', 'p1'));
+    checkResult(false, signaler.emit('signal1', 'p1', 'p2'));
+    checkResult(false, signaler.emit('signal1', 'p1', 'p2', 'p3'));
+    checkResult(false, signaler.emit('signal1', 'p1', 'p2', 'p3', 'p4'));
+
+    var called = false;
     signaler.on('signal1', function () {
         checkResult(0, arguments.length);
+        called = true;
     }, 'A');
-    checkResult(true, signaler.emit_signal1());
+    checkResult(true, signaler.emit('signal1'));
+    checkResult(true, called);
     signaler.off('signal1', 'A')
 
+    called = false;
     signaler.on('signal1', function (p1) {
         checkResult(1, arguments.length);
         checkResult('hello', p1);
+        called = true;
     }, 'A');
-    checkResult(true, signaler.emit_signal1('hello'));
+    checkResult(true, signaler.emit('signal1', 'hello'));
+    checkResult(true, called);
     signaler.off('signal1', 'A')
 
+    called = false;
     signaler.on('signal1', function (p1, p2) {
         checkResult(2, arguments.length);
         checkResult('hello', p1);
         checkResult('world', p2);
+        called = true;
     }, 'A');
-    checkResult(true, signaler.emit_signal1('hello', 'world'));
+    checkResult(true, signaler.emit('signal1', 'hello', 'world'));
+    checkResult(true, called);
     signaler.off('signal1', 'A')
 
+    called = false;
     signaler.on('signal1', function (p1, p2, p3) {
         checkResult(3, arguments.length);
         checkResult('hello', p1);
         checkResult('world', p2);
         checkResult('33', p3);
+        called = true;
     }, 'A');
-    checkResult(true, signaler.emit_signal1('hello', 'world', '33'));
+    checkResult(true, signaler.emit('signal1', 'hello', 'world', '33'));
+    checkResult(true, called);
     signaler.off('signal1', 'A')
 
+    called = false;
     signaler.on('signal1', function (p1, p2, p3, p4) {
         checkResult(4, arguments.length);
         checkResult('hello', p1);
         checkResult('world', p2);
         checkResult('33', p3);
         checkResult('44', p4);
+        called = true;
     }, 'A');
-    checkResult(true, signaler.emit_signal1('hello', 'world', '33', '44'));
+    checkResult(true, signaler.emit('signal1', 'hello', 'world', '33', '44'));
+    checkResult(true, called);
+    signaler.off('signal1', 'A')
+}
+
+function quickEmitErrorTest () {
+    EventEmitter.setDebugLevel(EventEmitter.DEBUG_THROW);
+    var signaler = new MySignaler();
+
+    checkException('Undeclared event ID for MySignaler: signalXXX', function () {
+        signaler.makeQuickEmitFunction('signalXXX');
+    });
+}
+
+function quickEmitTest () {
+    EventEmitter.setDebugLevel(EventEmitter.DEBUG_THROW);
+    var signaler = new MySignaler();
+    var listenerList = signaler.makeQuickEmitFunction('signal1');
+    checkResult('object', typeof listenerList);
+    checkResult(listenerList, signaler.makeQuickEmitFunction('signal1')); // returns same object
+
+    checkResult(false, listenerList.emit0());
+    checkResult(false, listenerList.emit1('p1'));
+    checkResult(false, listenerList.emit2('p1', 'p2'));
+    checkResult(false, listenerList.emit3('p1', 'p2', 'p3'));
+    checkResult(false, listenerList.emitN('p1', 'p2', 'p3', 'p4'));
+
+    quickEmitAll(signaler, listenerList);
+    //...and same with more than 1 listener
+    var count = 0;
+    signaler.on('signal1', function () {
+        count += arguments.length + 1;
+    }, 'B');
+    quickEmitAll(signaler, listenerList);
+    signaler.forgetListener('B');
+    checkResult(15, count); // 1 + 2 + 3 + 4 + 5
+}
+
+function quickEmitAll (signaler, listenerList) {
+    var called = false;
+    signaler.on('signal1', function () {
+        checkResult(0, arguments.length);
+        called = true;
+    }, 'A');
+    checkResult(true, listenerList.emit0());
+    checkResult(true, called);
+    signaler.off('signal1', 'A')
+
+    called = false;
+    signaler.on('signal1', function (p1) {
+        checkResult(1, arguments.length);
+        checkResult('hello', p1);
+        called = true;
+    }, 'A');
+    checkResult(true, listenerList.emit1('hello'));
+    checkResult(true, called);
+    signaler.off('signal1', 'A')
+
+    called = false;
+    signaler.on('signal1', function (p1, p2) {
+        checkResult(2, arguments.length);
+        checkResult('hello', p1);
+        checkResult('world', p2);
+        called = true;
+    }, 'A');
+    checkResult(true, listenerList.emit2('hello', 'world'));
+    checkResult(true, called);
+    signaler.off('signal1', 'A')
+
+    called = false;
+    signaler.on('signal1', function (p1, p2, p3) {
+        checkResult(3, arguments.length);
+        checkResult('hello', p1);
+        checkResult('world', p2);
+        checkResult('33', p3);
+        called = true;
+    }, 'A');
+    checkResult(true, listenerList.emit3('hello', 'world', '33'));
+    checkResult(true, called);
+    signaler.off('signal1', 'A')
+
+    called = false;
+    signaler.on('signal1', function (p1, p2, p3, p4) {
+        checkResult(4, arguments.length);
+        checkResult('hello', p1);
+        checkResult('world', p2);
+        checkResult('33', p3);
+        checkResult('44', p4);
+        called = true;
+    }, 'A');
+    checkResult(true, listenerList.emitN('hello', 'world', '33', '44'));
+    checkResult(true, called);
     signaler.off('signal1', 'A')
 }
 
 function oldApiTest () {
+    EventEmitter.setDebugLevel(EventEmitter.DEBUG_THROW);
     var signaler = new MySignaler();
     var callCount = 0;
     var fn = function (p1) {
         checkResult('hi', p1);
         callCount++;
     };
-    signaler.on('signal1', fn);
+    var fn2 = function () {};
+    signaler.removeListener('signal1', fn); // no effect if never set
+    signaler.addListener('signal1', fn); // synonym of "on"
     checkResult(true, signaler.emit('signal1', 'hi'));
     checkResult(1, callCount);
+    signaler.removeListener('signal1', fn2); // no effect if never set (and another function is listening)
     signaler.removeListener('signal1', fn);
+    signaler.removeListener('signal1', fn); // no effect if already removed
+    signaler.off('signal1', fn); // off is equivalent (for coverage)
     checkResult(false, signaler.emit('signal1', 'hey'));
     checkResult(1, callCount);
 
-    var fn2 = function () {};
     signaler.on('signal1', fn);
     checkException('Too many listeners: MySignaler.on(\'signal1\', fn). Use MySignaler.setMaxListeners(n) with n >= 2. Even better: specify your listeners when calling "on"',
         function () {
@@ -204,8 +369,9 @@ function oldApiTest () {
         });
     signaler.setMaxListeners(2);
     signaler.on('signal1', fn2); // when more than 1 fn an array is used
-    signaler.removeListener('signal1', fn2);
-    signaler.removeListener('signal1', fn);
+    signaler.off('signal1', fn2); // off here calls old API's removeListener
+    signaler.off('signal1', fn);
+    checkResult(false, signaler.emit('signal1'));
 
     EventEmitter.setDebugLevel(EventEmitter.DEBUG_ERROR);
     signaler.removeListener('signalXXX', fn);
@@ -215,7 +381,6 @@ function oldApiTest () {
     checkException('Invalid event ID: MySignaler.on(\'signalXXX\', fn)', function () {
         signaler.removeListener('signalXXX', fn);
     });
-    signaler.removeListener('signal5', fn); // no exception if valid event ID, even if no listener set
 
     // setMaxListeners
 
@@ -231,6 +396,26 @@ function oldApiTest () {
     signaler.setMaxListeners(2);
 }
 
+function setListenerMaxCountTest() {
+    var signaler = new MySignaler();
+    EventEmitter.setDebugLevel(EventEmitter.NO_DEBUG);
+    signaler.setListenerMaxCount(); // no effect if no debug
+    EventEmitter.setDebugLevel(EventEmitter.DEBUG_THROW);
+    checkException('Invalid parameters to emitter.setListenerMaxCount: 10, undefined', function () {
+        signaler.setListenerMaxCount(10);
+    });
+    function Ear() {}
+    var ear1 = new Ear(), ear2 = new Ear(), ear3 = new Ear();
+    signaler.setListenerMaxCount(2, ear1); // any Ear object is equivalent here
+    signaler.on('signal1', function () {}, ear1);
+    signaler.on('signal2', function () {}, ear1);
+    signaler.on('signal1', function () {}, ear2);
+    signaler.on('signal2', function () {}, ear2);
+    checkException('Too many listeners: MySignaler.on(\'signal2\', fn, Ear). Use MySignaler.setListenerMaxCount(n, Ear) with n >= 3', function () {
+        signaler.on('signal2', function () {}, ear3); // this is Ear #3 while we said only 2 can listen
+    });
+}
+
 function nodebugTest () {
     EventEmitter.setDebugLevel(EventEmitter.NO_DEBUG);
     var signaler = new MySignaler();
@@ -241,6 +426,63 @@ function nodebugTest () {
     signaler.declareEvent('signal1');
     checkConsole('Event ID declared twice: MySignaler.on(\'signal1\', fn)');
 }
+
+/**
+ * This test is here to see how we break when removing listeners during an emit on same event ID.
+ * See longer comments elsewhere about why this is not supported.
+ */
+function offDuringEmitTest () {
+    EventEmitter.setDebugLevel(EventEmitter.DEBUG_THROW);
+    var signaler = new MySignaler();
+    function Ear () { this.count = 0; }
+    var ear1 = new Ear(), ear2 = new Ear(), ear3 = new Ear();
+    ear1.onSignal1 = function () {
+        signaler.forgetListener(this);
+    };
+    ear2.onSignal1 = function () {
+        this.count++;
+    };
+    ear3.onSignal1 = ear2.onSignal1;
+    signaler.setListenerMaxCount(3, ear1);
+
+    signaler.on('signal1', ear1.onSignal1, ear1);
+    signaler.on('signal1', ear2.onSignal1, ear2);
+
+    checkException('Removed listener during emit: MySignaler.on(\'signal1\', fn, Ear)', function () {
+        signaler.emit('signal1');
+    });
+    // ear2 has NOT been notified because of exception during emit
+    checkResult(0, ear2.count);
+    // ear1 has been removed; ear2 is still listening
+    checkResult(1, signaler.listenerCount('signal1'));
+    checkResult(true, signaler.emit('signal1'));
+    checkResult(1, ear2.count);
+    signaler.off('signal1', ear2);
+    checkResult(0, signaler.listenerCount('signal1'));
+
+    // Try again but use no-throw mode now...
+
+    EventEmitter.setDebugLevel(EventEmitter.DEBUG_ERROR);
+    ear2.count = ear3.count = 0;
+    signaler.on('signal1', ear1.onSignal1, ear1);
+    signaler.on('signal1', ear2.onSignal1, ear2);
+    signaler.on('signal1', ear3.onSignal1, ear3);
+
+    signaler.emit('signal1');
+    checkConsole('Removed listener during emit: MySignaler.on(\'signal1\', fn, Ear)');
+
+    // ear2 has NOT been notified because it was just after ear1 when ear1 got removed (not handled)
+    checkResult(0, ear2.count);
+    // ear3 HAS been notified
+    checkResult(1, ear3.count);
+    // ear1 has been removed; ear2 & ear3 are still listening
+    checkResult(2, signaler.listenerCount('signal1'));
+    ear2.count = ear3.count = 0;
+    checkResult(true, signaler.emit('signal1'));
+    checkResult(1, ear2.count);
+    checkResult(1, ear3.count);
+}
+
 
 //---
 
@@ -280,10 +522,27 @@ function checkResult (expected, result) {
 
 function runTest () {
     rerouteConsole();
+
     basicTest();
+
+    slowEmitErrorTest();
+    EventEmitter.setDebugLevel(EventEmitter.DEBUG_THROW);
+    slowEmitTest();
+    EventEmitter.setDebugLevel(EventEmitter.NO_DEBUG);
+    slowEmitTest();
+
+    quickEmitErrorTest();
+    EventEmitter.setDebugLevel(EventEmitter.DEBUG_THROW);
     quickEmitTest();
+    EventEmitter.setDebugLevel(EventEmitter.NO_DEBUG);
+    quickEmitTest();
+
     oldApiTest();
+    setListenerMaxCountTest();
     nodebugTest();
+    offDuringEmitTest();
+
+    checkConsole(undefined); // catch any missed console error here
 
     console.log('Emitter test completed.');
 }
