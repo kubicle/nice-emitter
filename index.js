@@ -70,6 +70,14 @@ EventEmitter.prototype.makeQuickEmitFunction = function (eventId) {
     return listenerList;
 };
 
+EventEmitter.prototype.listenerCount = function listenerCount (eventId) {
+    var listenerList = this._listenersPerEventId[eventId];
+    if (listenerList === undefined) {
+        return throwOrConsole('Undeclared event ID for ' + getObjectClassname(this) + ': ', eventId);
+    }
+    return listenerList.count;
+};
+
 
 //--- Listener side
 
