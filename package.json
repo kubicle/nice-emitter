@@ -1,6 +1,6 @@
 {
     "name": "nice-emitter",
-    "version": "0.1.0",
+    "version": "0.2.0",
     "description": "Yet another EventEmitter, with features to help you get things right faster.",
     "main": "index.js",
     "repository": {
@@ -8,8 +8,10 @@
         "url": "git://github.com/kubicle/nice-emitter.git"
     },
     "scripts": {
-      "benchmark": "node ./test/benchmark.js",
-      "test": "node ./test/test.js"
+        "build": "uglifyjs index.js -m -c properties=false -o dist/nice-emitter.min.js",
+        "benchmark": "node ./test/benchmark.js",
+        "test": "node ./test/test.js",
+        "coverage": "node node_modules/istanbul/lib/cli.js cover ./test/test.js"
     },
     "keywords": [
         "EventEmitter",
@@ -26,5 +28,10 @@
         "subscribe"
     ],
     "author": "kubicle",
-    "license": "MIT"
-  }
+    "license": "MIT",
+    "devDependencies": {
+        "codeclimate-test-reporter": "^0.5.0",
+        "istanbul": "^0.4.5",
+        "uglify-js": "^2.8.18"
+    }
+}
