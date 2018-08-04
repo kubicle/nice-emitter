@@ -1,6 +1,5 @@
 # nice-emitter
-
-[![Build Status](https://travis-ci.org/kubicle/nice-emitter.svg?branch=master)](https://travis-ci.org/kubicle/nice-emitter)<a href="https://codeclimate.com/github/kubicle/nice-emitter/test_coverage"><img src="https://api.codeclimate.com/v1/badges/45b1a8464d385e78e6a6/test_coverage" /></a>
+[![Version npm](https://img.shields.io/npm/v/nice-emitter.svg?style=flat-square)](https://www.npmjs.com/package/nice-emitter)[![Build Status](https://travis-ci.org/kubicle/nice-emitter.svg?branch=master)](https://travis-ci.org/kubicle/nice-emitter)<a href="https://codeclimate.com/github/kubicle/nice-emitter/test_coverage"><img src="https://api.codeclimate.com/v1/badges/45b1a8464d385e78e6a6/test_coverage" /></a>
 
 Finally an EventEmitter that does what I want... and maybe what *you* want too...
 
