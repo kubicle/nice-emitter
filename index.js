@@ -62,7 +62,14 @@ EventEmitter.prototype.emit = function (eventId, p1, p2, p3) {
     }
 };
 
-EventEmitter.prototype.makeQuickEmitFunction = function (eventId) {
+/**
+ * Returns a "quick emitter" for a given event ID of this EventEmitter.
+ * Using a quick emitter to emit is quite faster (if you are chasing fractions of milliseconds).
+ *
+ * @param {string} eventId - declared event ID for which you want to "quick emit"
+ * @returns {QuickEmitter} - an object with methods emit0, emit1, emit2, emit3 and emitN
+ */
+EventEmitter.prototype.getQuickEmitter = function (eventId) {
     var listenerList = this._listenersPerEventId[eventId];
     if (listenerList === undefined) {
         return throwOrConsole('Undeclared event ID for ' + getObjectClassname(this) + ': ', eventId);

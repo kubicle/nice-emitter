@@ -11,7 +11,7 @@ var EE3 = require('eventemitter3');
 
 var tests = [];
 
-var ee3, ne, llist;
+var ee3, ne, qne;
 
 function handle() {
     if (arguments.length > 100) console.log('damn');
@@ -66,14 +66,14 @@ addTest('NE', function emit () {
     ne.on('foo', handle);
 });
 addTest('NE quickEmit', function emit () {
-    llist.emit0();
-    llist.emit1('bar');
-    llist.emit2('bar', 'baz');
-    llist.emit3('bar', 'baz', 'boom');
+    qne.emit0();
+    qne.emit1('bar');
+    qne.emit2('bar', 'baz');
+    qne.emit3('bar', 'baz', 'boom');
 }, function setup () {
     ne = new EventEmitter();
     ne.declareEvent('foo');
-    llist = ne.makeQuickEmitFunction('foo');
+    qne = ne.getQuickEmitter('foo');
     ne.on('foo', handle);
 });
 
@@ -156,7 +156,7 @@ addTest('NE quickEmit', function hundreds () {
     ne.quickEmits = [];
     for (var i = 0; i < 10; i++) {
         ne.declareEvent('event:' + i);
-        ne.quickEmits[i] = ne.makeQuickEmitFunction('event:' + i);
+        ne.quickEmits[i] = ne.getQuickEmitter('event:' + i);
         for (var j = 0; j < 10; j++) {
             ne.on('event:' + i, foo);
         }

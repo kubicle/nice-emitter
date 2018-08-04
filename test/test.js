@@ -257,41 +257,41 @@ function quickEmitErrorTest () {
     var signaler = new MySignaler();
 
     checkException('Undeclared event ID for MySignaler: signalXXX', function () {
-        signaler.makeQuickEmitFunction('signalXXX');
+        signaler.getQuickEmitter('signalXXX');
     });
 }
 
 function quickEmitTest () {
     EventEmitter.setDebugLevel(EventEmitter.DEBUG_THROW);
     var signaler = new MySignaler();
-    var listenerList = signaler.makeQuickEmitFunction('signal1');
-    checkResult('object', typeof listenerList);
-    checkResult(listenerList, signaler.makeQuickEmitFunction('signal1')); // returns same object
+    var quickEmitterSignal1 = signaler.getQuickEmitter('signal1');
+    checkResult('object', typeof quickEmitterSignal1);
+    checkResult(quickEmitterSignal1, signaler.getQuickEmitter('signal1')); // returns same object
 
-    checkResult(false, listenerList.emit0());
-    checkResult(false, listenerList.emit1('p1'));
-    checkResult(false, listenerList.emit2('p1', 'p2'));
-    checkResult(false, listenerList.emit3('p1', 'p2', 'p3'));
-    checkResult(false, listenerList.emitN('p1', 'p2', 'p3', 'p4'));
+    checkResult(false, quickEmitterSignal1.emit0());
+    checkResult(false, quickEmitterSignal1.emit1('p1'));
+    checkResult(false, quickEmitterSignal1.emit2('p1', 'p2'));
+    checkResult(false, quickEmitterSignal1.emit3('p1', 'p2', 'p3'));
+    checkResult(false, quickEmitterSignal1.emitN('p1', 'p2', 'p3', 'p4'));
 
-    quickEmitAll(signaler, listenerList);
+    quickEmitAll(signaler, quickEmitterSignal1);
     //...and same with more than 1 listener
     var count = 0;
     signaler.on('signal1', function () {
         count += arguments.length + 1;
     }, 'B');
-    quickEmitAll(signaler, listenerList);
+    quickEmitAll(signaler, quickEmitterSignal1);
     signaler.forgetListener('B');
     checkResult(15, count); // 1 + 2 + 3 + 4 + 5
 }
 
-function quickEmitAll (signaler, listenerList) {
+function quickEmitAll (signaler, quickEmitterSignal1) {
     var called = false;
     signaler.on('signal1', function () {
         checkResult(0, arguments.length);
         called = true;
     }, 'A');
-    checkResult(true, listenerList.emit0());
+    checkResult(true, quickEmitterSignal1.emit0());
     checkResult(true, called);
     signaler.off('signal1', 'A')
 
@@ -301,7 +301,7 @@ function quickEmitAll (signaler, listenerList) {
         checkResult('hello', p1);
         called = true;
     }, 'A');
-    checkResult(true, listenerList.emit1('hello'));
+    checkResult(true, quickEmitterSignal1.emit1('hello'));
     checkResult(true, called);
     signaler.off('signal1', 'A')
 
@@ -312,7 +312,7 @@ function quickEmitAll (signaler, listenerList) {
         checkResult('world', p2);
         called = true;
     }, 'A');
-    checkResult(true, listenerList.emit2('hello', 'world'));
+    checkResult(true, quickEmitterSignal1.emit2('hello', 'world'));
     checkResult(true, called);
     signaler.off('signal1', 'A')
 
@@ -324,7 +324,7 @@ function quickEmitAll (signaler, listenerList) {
         checkResult('33', p3);
         called = true;
     }, 'A');
-    checkResult(true, listenerList.emit3('hello', 'world', '33'));
+    checkResult(true, quickEmitterSignal1.emit3('hello', 'world', '33'));
     checkResult(true, called);
     signaler.off('signal1', 'A')
 
@@ -337,7 +337,7 @@ function quickEmitAll (signaler, listenerList) {
         checkResult('44', p4);
         called = true;
     }, 'A');
-    checkResult(true, listenerList.emitN('hello', 'world', '33', '44'));
+    checkResult(true, quickEmitterSignal1.emitN('hello', 'world', '33', '44'));
     checkResult(true, called);
     signaler.off('signal1', 'A')
 }
