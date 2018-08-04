@@ -11,7 +11,7 @@ var EE3 = require('eventemitter3');
 
 var tests = [];
 
-var ee3, ne;
+var ee3, ne, llist;
 
 function handle() {
     if (arguments.length > 100) console.log('damn');
@@ -66,14 +66,14 @@ addTest('NE', function emit () {
     ne.on('foo', handle);
 });
 addTest('NE quickEmit', function emit () {
-    ne.emit_foo();
-    ne.emit_foo('bar');
-    ne.emit_foo('bar', 'baz');
-    ne.emit_foo('bar', 'baz', 'boom');
+    llist.emit0();
+    llist.emit1('bar');
+    llist.emit2('bar', 'baz');
+    llist.emit3('bar', 'baz', 'boom');
 }, function setup () {
     ne = new EventEmitter();
     ne.declareEvent('foo');
-    ne.makeQuickEmitFunction('foo');
+    llist = ne.makeQuickEmitFunction('foo');
     ne.on('foo', handle);
 });
 
@@ -148,7 +148,7 @@ addTest('NE', function hundreds () {
 });
 addTest('NE quickEmit', function hundreds () {
     for (var i = 0; i < 10; i++) {
-        ne.quickEmits[i]();
+        ne.quickEmits[i].emit0();
     }
 }, function setup () {
     ne = new EventEmitter();
@@ -163,21 +163,21 @@ addTest('NE quickEmit', function hundreds () {
     }
 });
 
+//---
+
 var MIN_RUN_MS = 1000;
 
 function addTest (mode, test, setup) {
     tests.push({ mode: mode, test: test, setup: setup });
 }
 
+var refCountPerMsByTestName = {};
+
 var TEST_PROD = true;
 
 function runBenchmark () {
-    var neMode;
     if (TEST_PROD) {
         EventEmitter.setDebugLevel(EventEmitter.NO_DEBUG);
-        neMode = 'PROD';
-    } else {
-        neMode = 'DEBUG';
     }
 
     for (var t = 0; t < tests.length; t++) {
@@ -186,24 +186,37 @@ function runBenchmark () {
             decl.setup();
         }
 
-        var sufix = decl.mode === 'NE' ? 'NE ' + neMode : decl.mode;
-        console.log(runOneTest(decl, sufix));
+        logOneTest(runOneTest(decl));
     }
 }
 
-function runOneTest (decl, sufix) {
+function runOneTest (decl) {
     var fn = decl.test;
-    var testName = fn.name + (sufix ? ' ' + sufix : '');
-
     var t0 = Date.now();
     var count = 0, duration = 0;
+
     while (duration < MIN_RUN_MS) {
         for (var i = 0; i < 1000; i++) fn();
         count++;
         duration = Date.now() - t0;
     }
 
-    return testName + ': ' + count + 'k runs in ' + duration + 'ms';
+    return { decl: decl, count: count, duration: duration };
+}
+
+function logOneTest (result) {
+    var testName = result.decl.test.name;
+    var mode = result.decl.mode;
+    var countPerMs = result.count / result.duration;
+    var sufix = mode, factor = '';
+    if (mode === 'EE3') {
+        refCountPerMsByTestName[testName] = countPerMs;
+    } else if (mode.startsWith('NE')) {
+        sufix += ' ' + (TEST_PROD ? 'PROD' : 'DEBUG');
+        factor = '   [x ' + (countPerMs / refCountPerMsByTestName[testName]).toFixed(2) + ']';
+    }
+    var msg = testName + ' ' + sufix + ': ' + result.count + 'k runs in ' + result.duration + 'ms' + factor;
+    console.log(msg);
 }
 
 runBenchmark();
