@@ -384,7 +384,7 @@ function oldApiTest () {
 
     // setMaxListeners
 
-    checkException('EventEmitter.setMaxListeners is not a function', function () { EventEmitter.setMaxListeners(); });
+    checkException('*setMaxListeners', function () { EventEmitter.setMaxListeners(); });
     checkException('Invalid parameters to emitter.setMaxListeners: 0', function () { signaler.setMaxListeners(0); });
     checkException('Invalid parameters to emitter.setMaxListeners: undefined', function () { signaler.setMaxListeners(undefined); });
     checkException('Invalid parameters to emitter.setMaxListeners: 1, extra', function () { signaler.setMaxListeners(1, 'extra'); });
@@ -504,6 +504,13 @@ function checkConsole (expected) {
     if (consoleErrors.length > 0) throw new Error('Unexpected console.error: ' + consoleErrors[0]);
 }
 
+/**
+ * Verifies that an exception is generated.
+ * Throws if no exception or if exception message is not as expected.
+ *
+ * @param {string} expected - exact exception message OR "*subtext" to match any message which contains subtext
+ * @param {function} testFn - test to run
+ */
 function checkException (expected, testFn) {
     var exc = '[no-exception]';
     try {
@@ -511,9 +518,10 @@ function checkException (expected, testFn) {
     } catch (e) {
         exc = e.message;
     }
-    if (exc !== expected) {
-        throw new Error('Expected exception:\n' + expected + '\nbut got:\n' + exc);
-    }
+    if (exc === expected) return;
+    if (expected[0] === '*' && exc.indexOf(expected.substr(1)) !== -1) return;
+
+    throw new Error('Expected exception:\n' + expected + '\nbut got:\n' + exc);
 }
 
 function checkResult (expected, result) {
