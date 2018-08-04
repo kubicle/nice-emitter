@@ -224,8 +224,8 @@ ListenerList.prototype._removeListener = function (index, listener) {
 
     if (debugLevel > 0) {
         var listenerKey = getObjectClassname(listener);
-        if (this.isEmitting) throwOrConsole('"on" removed during emit: ', getAsText(this.emitter, this.eventId, listener));
         this.counterMap[listenerKey]--;
+        if (this.isEmitting) throwOrConsole('Removed listener during emit: ', getAsText(this.emitter, this.eventId, listener));
     }
 };
 
