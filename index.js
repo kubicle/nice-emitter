@@ -102,20 +102,19 @@ EventEmitter.prototype.on = function (eventId, method, listener) {
     listenerList._addListener(listener || this, method);
     return this;
 };
+EventEmitter.prototype.addListener = EventEmitter.prototype.on;
 
 /**
  * Unsubscribes from an event.
+ * NB: specifying your listeners when calling "on" is often much easier
+ * than having to track/store which functions your use to register.
  *
  * @param {string} eventId
- * @param {object|string} listener - same "listener" you passed when you called "on"
+ * @param {object|string|function} listener - same "listener" you passed when you called "on"
  */
 EventEmitter.prototype.off = function (eventId, listener) {
     var listenerList = this._listenersPerEventId[eventId];
     if (!listenerList) return throwOrConsole('Invalid event ID: ', getAsText(this, eventId, listener));
-
-    if (debugLevel > 0 && !listener) {
-        return throwOrConsole('Invalid parameter to emitter.off: \'', eventId + '\', ' + listener);
-    }
 
     if (typeof listener === 'function') {
         // Old API compatibility
@@ -123,19 +122,14 @@ EventEmitter.prototype.off = function (eventId, listener) {
         if (indexFn !== -1) listenerList._removeListener(indexFn, null);
     } else {
         var index = listenerList._findListener(listener);
-        if (index !== -1) listenerList._removeListener(index, listener);
+        if (index !== -1) {
+            listenerList._removeListener(index, listener);
+        } else if (debugLevel > 0 && !listener) {
+            return throwOrConsole('Invalid parameter to emitter.off: \'', eventId + '\', ' + listener);
+        }
     }
 };
-
-// Old API compatibility - specifying your listeners when calling "on" is often much easier
-// than having to track/store which functions your use to register.
-EventEmitter.prototype.removeListener = function (eventId, fn) {
-    var listenerList = this._listenersPerEventId[eventId];
-    if (!listenerList) return throwOrConsole('Invalid event ID: ', getAsText(this, eventId));
-
-    var index = listenerList._findMethod(fn);
-    if (index !== -1) listenerList._removeListener(index, null);
-};
+EventEmitter.prototype.removeListener = EventEmitter.prototype.off;
 
 EventEmitter.prototype.forgetListener = function (listener) {
     for (var eventId in this._listenersPerEventId) {
@@ -150,6 +144,7 @@ EventEmitter.prototype.setListenerMaxCount = function (maxCount, listener) {
     }
     this._maxCountPerListenerKey[getObjectClassname(listener)] = maxCount;
 };
+
 // Old API compatibility
 EventEmitter.prototype.setMaxListeners = function (maxCount) {
     if (debugLevel === 0) return;
@@ -346,7 +341,7 @@ function getObjectClassname (listener) {
 }
 
 function getAsText (emitter, eventId, listener) {
-    if (listener === undefined) {
+    if (listener === undefined || typeof listener === 'function') {
         return getObjectClassname(emitter) + '.on(\'' + eventId + '\', fn)';
     } else {
         return getObjectClassname(emitter) + '.on(\'' + eventId + '\', fn, ' + getObjectClassname(listener) + ')';
