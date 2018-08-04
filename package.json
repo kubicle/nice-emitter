@@ -1,6 +1,6 @@
 {
     "name": "nice-emitter",
-    "version": "0.2.0",
+    "version": "0.3.0",
     "description": "Yet another EventEmitter, with features to help you get things right faster.",
     "main": "index.js",
     "repository": {
@@ -17,7 +17,6 @@
         "EventEmitter",
         "EventEmitter3",
         "Events",
-        "addEventListener",
         "addListener",
         "emit",
         "emits",
