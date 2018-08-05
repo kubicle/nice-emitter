@@ -1285,7 +1285,7 @@ addTest('NE', function emitMultiListeners () {
     ne.emit('foo', 'bar', 'baz', 'boom');
 }, function setup () {
     ne = new EventEmitter();
-    ne.setListenerMaxCount(3); // other way was: ne.on('foo', foo, 'a').on('foo', bar, 'b').on('foo', baz, 'c')
+    ne.setMaxListeners(3); // other way was: ne.on('foo', foo, 'a').on('foo', bar, 'b').on('foo', baz, 'c')
     ne.declareEvent('foo');
     ne.on('foo', foo).on('foo', bar).on('foo', baz);
 });
@@ -1369,7 +1369,8 @@ var TEST_PROD = true;
 
 function runAllBenchmark () {
     for (var t = 0; t < tests.length; t++) {
-        runBenchmark(t, TEST_PROD);
+        var result = runBenchmark(t, TEST_PROD);
+        console.log(result.msg);
     }
 }
 
@@ -1381,16 +1382,15 @@ function runAllBenchmark () {
  * @returns {number|null} - null if index is out of range; otherwise ratio compared to ref (-1 if this was ref)
  */
 function runBenchmark (index, isProd) {
-    if (isProd) {
-        EventEmitter.setDebugLevel(EventEmitter.NO_DEBUG);
-    }
+    EventEmitter.setDebugLevel(isProd ? EventEmitter.NO_DEBUG : EventEmitter.DEBUG_THROW);
+
     var decl = tests[index];
     if (!decl) return null;
     if (decl.setup) {
         decl.setup();
     }
 
-    return logOneTest(runOneTest(decl, isProd));
+    return logOneTest(runOneTest(decl), isProd);
 }
 
 function runOneTest (decl) {
@@ -1411,17 +1411,18 @@ function logOneTest (result, isProd) {
     var testName = result.decl.test.name;
     var mode = result.decl.mode;
     var countPerMs = result.count / result.duration;
-    var sufix = mode, factorStr = '', factor = -1;
+    var sufix = mode, factorStr = '';
     if (mode === 'EE3') {
         refCountPerMsByTestName[testName] = countPerMs;
+        result.factor = 0;
     } else if (mode.startsWith('NE')) {
         sufix += ' ' + (isProd ? 'PROD' : 'DEBUG');
-        factor = countPerMs / refCountPerMsByTestName[testName];
-        factorStr = '   [x ' + factor.toFixed(2) + ']';
+        result.factor = countPerMs / refCountPerMsByTestName[testName];
+        factorStr = '   [x ' + result.factor.toFixed(2) + ']';
     }
     var msg = testName + ' ' + sufix + ': ' + result.count + 'k runs in ' + result.duration + 'ms' + factorStr;
-    console.log(msg);
-    return factor;
+    result.msg = msg;
+    return result;
 }
 
 if (typeof window === 'undefined') {
@@ -1472,22 +1473,29 @@ function runItAll () {
     setTimeout(runOneStep, 100);
 }
 
-var stepNames = ['Benchmark PROD', 'Benchmark DEBUG', 'Test / coverage']
+var stepNames = ['Benchmark DEBUG', 'Benchmark PROD', 'Test / coverage']
 var step = 0;
 var subStep = 0;
 
 function runOneStep () {
     if (subStep === 0) logSection(stepNames[step]);
+    var result;
 
     switch (step) {
     case 0:
-        if (!runBenchmark(subStep++, /*isProd=*/true)) {
+        result = runBenchmark(subStep++, /*isProd=*/false);
+        if (result !== null) {
+            log(result.msg); // TODO: use result.factor
+        } else {
             step++;
             subStep = 0;
         }
         break;
     case 1:
-        if (!runBenchmark(subStep++, /*isProd=*/false)) {
+        result = runBenchmark(subStep++, /*isProd=*/true);
+        if (result !== null) {
+            log(result.msg); // TODO: use result.factor
+        } else {
             step++;
             subStep = 0;
         }

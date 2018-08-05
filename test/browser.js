@@ -39,22 +39,29 @@ function runItAll () {
     setTimeout(runOneStep, 100);
 }
 
-var stepNames = ['Benchmark PROD', 'Benchmark DEBUG', 'Test / coverage']
+var stepNames = ['Benchmark DEBUG', 'Benchmark PROD', 'Test / coverage']
 var step = 0;
 var subStep = 0;
 
 function runOneStep () {
     if (subStep === 0) logSection(stepNames[step]);
+    var result;
 
     switch (step) {
     case 0:
-        if (!runBenchmark(subStep++, /*isProd=*/true)) {
+        result = runBenchmark(subStep++, /*isProd=*/false);
+        if (result !== null) {
+            log(result.msg); // TODO: use result.factor
+        } else {
             step++;
             subStep = 0;
         }
         break;
     case 1:
-        if (!runBenchmark(subStep++, /*isProd=*/false)) {
+        result = runBenchmark(subStep++, /*isProd=*/true);
+        if (result !== null) {
+            log(result.msg); // TODO: use result.factor
+        } else {
             step++;
             subStep = 0;
         }
