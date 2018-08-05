@@ -414,6 +414,18 @@ function setListenerMaxCountTest() {
     checkException('Too many listeners: MySignaler.on(\'signal2\', fn, Ear). Use MySignaler.setListenerMaxCount(n, Ear) with n >= 3', function () {
         signaler.on('signal2', function () {}, ear3); // this is Ear #3 while we said only 2 can listen
     });
+    signaler.forgetListener(ear1);
+    signaler.forgetListener(ear2);
+    signaler.forgetListener(ear3);
+    signaler.on('signal1', function () {}, ear1);
+    signaler.on('signal1', function () {}, ear2);
+    signaler.off('signal1', ear2);
+    signaler.on('signal1', function () {}, ear2);
+    signaler.off('signal1', ear2);
+    signaler.on('signal1', function () {}, ear2);
+    checkException('Too many listeners: MySignaler.on(\'signal1\', fn, Ear). Use MySignaler.setListenerMaxCount(n, Ear) with n >= 3', function () {
+        signaler.on('signal1', function () {}, ear3); // this is Ear #3 while we said only 2 can listen
+    });
 }
 
 function nodebugTest () {
