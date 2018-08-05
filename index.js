@@ -82,7 +82,7 @@ EventEmitter.prototype.listenerCount = function listenerCount (eventId) {
     if (listenerList === undefined) {
         return throwOrConsole('Undeclared event ID for ' + getObjectClassname(this) + ': ', eventId);
     }
-    return listenerList.count;
+    return listenerList._count;
 };
 
 
@@ -172,160 +172,160 @@ EventEmitter.prototype.setMaxListeners = function (maxCount) {
  * @param {string} eventId
  */
 function ListenerList (emitter, eventId) {
-    this.methods = null; // null, function, or array of functions
-    this.objects = null; // null, context, or array of contexts
-    this.count = 0; // count of "listeners"
+    this._count = 0; // count of "listeners"
+    this._methods = null; // null, function, or array of functions
+    this._objects = null; // null, context, or array of contexts
 
     if (debugLevel > 0) {
-        this.emitter = emitter; // our parent EventEmitter
-        this.eventId = eventId;
-        this.isEmitting = false;
-        this.counterMap = {}; // key: listenerKey, value: count of listeners with same listenerKey
+        this._emitter = emitter; // our parent EventEmitter
+        this._eventId = eventId;
+        this._isEmitting = false;
+        this._counterMap = {}; // key: listenerKey, value: count of listeners with same listenerKey
     }
 }
 
 ListenerList.prototype._addListener = function (context, method) {
-    if (typeof this.methods === 'function') {
+    if (typeof this._methods === 'function') {
         // 1 -> 2 # Array creation
-        this.count = 2;
-        this.methods = [this.methods, method];
-        this.objects = [this.objects, context];
-    } else if (this.count === 0) {
+        this._count = 2;
+        this._methods = [this._methods, method];
+        this._objects = [this._objects, context];
+    } else if (this._count === 0) {
         // 0 -> 1
-        this.count = 1;
-        this.methods = method;
-        this.objects = context;
+        this._count = 1;
+        this._methods = method;
+        this._objects = context;
     } else {
         // n -> n+1 (n >= 0) # Array already exists
-        this.methods[this.count] = method;
-        this.objects[this.count++] = context;
+        this._methods[this._count] = method;
+        this._objects[this._count++] = context;
     }
 };
 
 ListenerList.prototype._findListener = function (listener) {
-    if (typeof this.methods === 'function') {
-        return this.objects === listener ? 0 : -1;
+    if (typeof this._methods === 'function') {
+        return this._objects === listener ? 0 : -1;
     } else {
-        return this.objects !== null ? this.objects.indexOf(listener) : -1;
+        return this._objects !== null ? this._objects.indexOf(listener) : -1;
     }
 };
 
 ListenerList.prototype._findMethod = function (method) {
-    if (typeof this.methods === 'function') {
-        return this.methods === method ? 0 : -1;
+    if (typeof this._methods === 'function') {
+        return this._methods === method ? 0 : -1;
     } else {
-        return this.methods !== null ? this.methods.indexOf(method) : -1;
+        return this._methods !== null ? this._methods.indexOf(method) : -1;
     }
 };
 
 ListenerList.prototype._removeListener = function (index, listener) {
-    this.count--;
-    if (typeof this.methods === 'function') {
-        this.methods = null;
-        this.objects = null;
+    this._count--;
+    if (typeof this._methods === 'function') {
+        this._methods = null;
+        this._objects = null;
     } else {
-        for (var i = index; i < this.count; i++) {
-            this.methods[i] = this.methods[i + 1];
-            this.objects[i] = this.objects[i + 1];
+        for (var i = index; i < this._count; i++) {
+            this._methods[i] = this._methods[i + 1];
+            this._objects[i] = this._objects[i + 1];
         }
-        this.methods[i] = null;
-        this.objects[i] = null;
+        this._methods[i] = null;
+        this._objects[i] = null;
     }
 
     if (debugLevel > 0) {
         var listenerKey = getObjectClassname(listener);
-        this.counterMap[listenerKey]--;
-        if (this.isEmitting) throwOrConsole('Removed listener during emit: ', getAsText(this.emitter, this.eventId, listener));
+        this._counterMap[listenerKey]--;
+        if (this._isEmitting) throwOrConsole('Removed listener during emit: ', getAsText(this._emitter, this._eventId, listener));
     }
 };
 
 // Only used if debugLevel > 0
 ListenerList.prototype._countListener = function (context, listener) {
     var listenerKey = getObjectClassname(listener);
-    var currentCount = (this.counterMap[listenerKey] || 0) + 1;
-    var maxListenerCount = this.emitter._maxCountPerListenerKey[listenerKey] || 1;
+    var currentCount = (this._counterMap[listenerKey] || 0) + 1;
+    var maxListenerCount = this._emitter._maxCountPerListenerKey[listenerKey] || 1;
     if (currentCount > maxListenerCount) {
-        var msg = 'Too many listeners: ' + getAsText(this.emitter, this.eventId, listener) + '. ';
+        var msg = 'Too many listeners: ' + getAsText(this._emitter, this._eventId, listener) + '. ';
         var advice = listener
-            ? 'Use ' + getObjectClassname(this.emitter) + '.setListenerMaxCount(n, ' + listenerKey + ') with n >= ' + currentCount
-            : 'Use ' + getObjectClassname(this.emitter) + '.setMaxListeners(n) with n >= ' + currentCount + '. Even better: specify your listeners when calling "on"';
+            ? 'Use ' + getObjectClassname(this._emitter) + '.setListenerMaxCount(n, ' + listenerKey + ') with n >= ' + currentCount
+            : 'Use ' + getObjectClassname(this._emitter) + '.setMaxListeners(n) with n >= ' + currentCount + '. Even better: specify your listeners when calling "on"';
         throwOrConsole(msg, advice); // if console we can continue below
     }
-    this.counterMap[listenerKey] = currentCount; // not done if exception above
+    this._counterMap[listenerKey] = currentCount; // not done if exception above
     // Same listener should not listen twice to same event ID (does not apply to "undefined" listener)
-    // NB: this.count is not yet updated at this point, hence this.count >= 1 below (instead of 2)
-    if (currentCount >= 2 && this.count >= 1 && context === listener && this._findListener(listener) !== -1) {
-        throwOrConsole('Listener listens twice: ', getAsText(this.emitter, this.eventId, listener));
+    // NB: this._count is not yet updated at this point, hence this._count >= 1 below (instead of 2)
+    if (currentCount >= 2 && this._count >= 1 && context === listener && this._findListener(listener) !== -1) {
+        throwOrConsole('Listener listens twice: ', getAsText(this._emitter, this._eventId, listener));
     }
 };
 
 ListenerList.prototype.emit0 = function () {
-    if (this.count === 0) return false; // 0 listeners
-    if (debugLevel > 0) this.isEmitting = true;
+    if (this._count === 0) return false; // 0 listeners
+    if (debugLevel > 0) this._isEmitting = true;
 
-    if (typeof this.methods === 'function') {
-        this.methods.call(this.objects);
+    if (typeof this._methods === 'function') {
+        this._methods.call(this._objects);
     } else {
-        for (var i = 0; i < this.count; i++) { this.methods[i].call(this.objects[i]); }
+        for (var i = 0; i < this._count; i++) { this._methods[i].call(this._objects[i]); }
     }
 
-    if (debugLevel > 0) this.isEmitting = false;
+    if (debugLevel > 0) this._isEmitting = false;
     return true;
 };
 
 ListenerList.prototype.emit1 = function (arg1) {
-    if (this.count === 0) return false; // 0 listeners
-    if (debugLevel > 0) this.isEmitting = true;
+    if (this._count === 0) return false; // 0 listeners
+    if (debugLevel > 0) this._isEmitting = true;
 
-    if (typeof this.methods === 'function') {
-        this.methods.call(this.objects, arg1);
+    if (typeof this._methods === 'function') {
+        this._methods.call(this._objects, arg1);
     } else {
-        for (var i = 0; i < this.count; i++) { this.methods[i].call(this.objects[i], arg1); }
+        for (var i = 0; i < this._count; i++) { this._methods[i].call(this._objects[i], arg1); }
     }
 
-    if (debugLevel > 0) this.isEmitting = false;
+    if (debugLevel > 0) this._isEmitting = false;
     return true;
 };
 
 ListenerList.prototype.emit2 = function (arg1, arg2) {
-    if (this.count === 0) return false; // 0 listeners
-    if (debugLevel > 0) this.isEmitting = true;
+    if (this._count === 0) return false; // 0 listeners
+    if (debugLevel > 0) this._isEmitting = true;
 
-    if (typeof this.methods === 'function') {
-        this.methods.call(this.objects, arg1, arg2);
+    if (typeof this._methods === 'function') {
+        this._methods.call(this._objects, arg1, arg2);
     } else {
-        for (var i = 0; i < this.count; i++) { this.methods[i].call(this.objects[i], arg1, arg2); }
+        for (var i = 0; i < this._count; i++) { this._methods[i].call(this._objects[i], arg1, arg2); }
     }
 
-    if (debugLevel > 0) this.isEmitting = false;
+    if (debugLevel > 0) this._isEmitting = false;
     return true;
 };
 
 ListenerList.prototype.emit3 = function (arg1, arg2, arg3) {
-    if (this.count === 0) return false; // 0 listeners
-    if (debugLevel > 0) this.isEmitting = true;
+    if (this._count === 0) return false; // 0 listeners
+    if (debugLevel > 0) this._isEmitting = true;
 
-    if (typeof this.methods === 'function') {
-        this.methods.call(this.objects, arg1, arg2, arg3);
+    if (typeof this._methods === 'function') {
+        this._methods.call(this._objects, arg1, arg2, arg3);
     } else {
-        for (var i = 0; i < this.count; i++) { this.methods[i].call(this.objects[i], arg1, arg2, arg3); }
+        for (var i = 0; i < this._count; i++) { this._methods[i].call(this._objects[i], arg1, arg2, arg3); }
     }
 
-    if (debugLevel > 0) this.isEmitting = false;
+    if (debugLevel > 0) this._isEmitting = false;
     return true;
 };
 
 ListenerList.prototype.emitN = function () {
-    if (this.count === 0) return false; // 0 listeners
-    if (debugLevel > 0) this.isEmitting = true;
+    if (this._count === 0) return false; // 0 listeners
+    if (debugLevel > 0) this._isEmitting = true;
 
-    if (typeof this.methods === 'function') {
-        this.methods.apply(this.objects, arguments);
+    if (typeof this._methods === 'function') {
+        this._methods.apply(this._objects, arguments);
     } else {
-        for (var i = 0; i < this.count; i++) { this.methods[i].apply(this.objects[i], arguments); }
+        for (var i = 0; i < this._count; i++) { this._methods[i].apply(this._objects[i], arguments); }
     }
 
-    if (debugLevel > 0) this.isEmitting = false;
+    if (debugLevel > 0) this._isEmitting = false;
     return true;
 };
 
