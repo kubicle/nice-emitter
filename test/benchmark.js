@@ -175,19 +175,30 @@ var refCountPerMsByTestName = {};
 
 var TEST_PROD = true;
 
-function runBenchmark () {
-    if (TEST_PROD) {
+function runAllBenchmark () {
+    for (var t = 0; t < tests.length; t++) {
+        runBenchmark(t, TEST_PROD);
+    }
+}
+
+/**
+ * Runs one benchmark test
+ *
+ * @param {number} index - index of requested benchmark
+ * @param {boolean} isProd - true if PROD mode (no debug check) should be used
+ * @returns {number|null} - null if index is out of range; otherwise ratio compared to ref (-1 if this was ref)
+ */
+function runBenchmark (index, isProd) {
+    if (isProd) {
         EventEmitter.setDebugLevel(EventEmitter.NO_DEBUG);
     }
-
-    for (var t = 0; t < tests.length; t++) {
-        var decl = tests[t];
-        if (decl.setup) {
-            decl.setup();
-        }
-
-        logOneTest(runOneTest(decl));
+    var decl = tests[index];
+    if (!decl) return null;
+    if (decl.setup) {
+        decl.setup();
     }
+
+    return logOneTest(runOneTest(decl, isProd));
 }
 
 function runOneTest (decl) {
@@ -204,19 +215,25 @@ function runOneTest (decl) {
     return { decl: decl, count: count, duration: duration };
 }
 
-function logOneTest (result) {
+function logOneTest (result, isProd) {
     var testName = result.decl.test.name;
     var mode = result.decl.mode;
     var countPerMs = result.count / result.duration;
-    var sufix = mode, factor = '';
+    var sufix = mode, factorStr = '', factor = -1;
     if (mode === 'EE3') {
         refCountPerMsByTestName[testName] = countPerMs;
     } else if (mode.startsWith('NE')) {
-        sufix += ' ' + (TEST_PROD ? 'PROD' : 'DEBUG');
-        factor = '   [x ' + (countPerMs / refCountPerMsByTestName[testName]).toFixed(2) + ']';
+        sufix += ' ' + (isProd ? 'PROD' : 'DEBUG');
+        factor = countPerMs / refCountPerMsByTestName[testName];
+        factorStr = '   [x ' + factor.toFixed(2) + ']';
     }
-    var msg = testName + ' ' + sufix + ': ' + result.count + 'k runs in ' + result.duration + 'ms' + factor;
+    var msg = testName + ' ' + sufix + ': ' + result.count + 'k runs in ' + result.duration + 'ms' + factorStr;
     console.log(msg);
+    return factor;
 }
 
-runBenchmark();
+if (typeof window === 'undefined') {
+    runAllBenchmark();
+} else {
+    exports.runBenchmark = runBenchmark;
+}

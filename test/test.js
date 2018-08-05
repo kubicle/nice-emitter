@@ -91,6 +91,7 @@ AnotherListener.prototype.checkReceivedCount = function (expected) {
 
 
 function basicTest () {
+    EventEmitter.setDebugLevel(EventEmitter.DEBUG_THROW);
     var signaler = new MySignaler();
     var a = new MyListener(signaler, 'A');
     var b = new MyListener(signaler, 'B');
@@ -129,9 +130,9 @@ function basicTest () {
 }
 
 function slowEmitErrorTest () {
+    EventEmitter.setDebugLevel(EventEmitter.DEBUG_THROW);
     var signaler = new MySignaler();
 
-    EventEmitter.setDebugLevel(EventEmitter.DEBUG_THROW);
     checkException('Invalid event ID: MySignaler.on(\'signalXXX\', fn)', function () {
         signaler.on('signalXXX', function () {});
     });
@@ -187,6 +188,7 @@ function slowEmitErrorTest () {
 }
 
 function slowEmitTest () {
+    EventEmitter.setDebugLevel(EventEmitter.DEBUG_THROW);
     var signaler = new MySignaler();
 
     checkResult(0, signaler.listenerCount('signal1'));
@@ -580,4 +582,8 @@ function runTest () {
     console.log('Emitter test completed.');
 }
 
-runTest();
+if (typeof window === 'undefined') {
+    runTest();
+} else {
+    exports.runTest = runTest;
+}
