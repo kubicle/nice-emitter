@@ -1,3 +1,4 @@
+'use strict';
 /**
  * Nice EventEmitter
  * - more object-friendly: listeners can be objects (i.e. no need to "bind" on listening methods)
