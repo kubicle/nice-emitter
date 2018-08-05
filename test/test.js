@@ -352,6 +352,9 @@ function oldApiTest () {
     };
     var fn2 = function () {};
     signaler.removeListener('signal1', fn); // no effect if never set
+    signaler.on('signal1', fn); // on & addListener are synonyms
+    signaler.removeListener('signal1', fn2); // coverage: remove unknow function when 1 listening function
+    signaler.off('signal1', fn); // off & removeListener are synonyms; coverage: remove when 1 function
     signaler.addListener('signal1', fn); // synonym of "on"
 
     // listen twice is allowed if you don't use context and called setMaxListeners beforehand
@@ -368,7 +371,7 @@ function oldApiTest () {
     signaler.removeListener('signal1', fn2); // no effect if never set (and another function is listening)
     signaler.removeListener('signal1', fn);
     signaler.removeListener('signal1', fn); // no effect if already removed
-    signaler.off('signal1', fn); // off is equivalent (for coverage)
+    signaler.removeListener('signal1', fn);
     checkResult(false, signaler.emit('signal1', 'hey'));
     checkResult(1, callCount);
 
