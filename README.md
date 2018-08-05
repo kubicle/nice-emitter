@@ -63,13 +63,15 @@ NB: the context-passing feature is also provided by EventEmitter3 (but not the e
 
 Ever wondered why Node.js EventEmitter sets its "leak warning" limit to 10 by default?
 This could be because this counting was designed wrongly from the start.
-In most systems, there will be 0 or 1 listener to a given type of events (2 would mean a leak), or a dozen listeners like when UI components listen to one of them (the limit to decide a leak would varry a lot).
+In most systems, there will be 0 or 1 listener to a given type of events (2 would mean a leak), or a dozen listeners like when UI components listen to one of them (the limit to decide a leak would vary a lot).
 What seems to be true for most systems is: it is always easier to decide the right limit at listener level than emitter level.
-Hence, `nice-emitter` allows to set the limit "per listener" class.
+Hence, `nice-emitter` allows to set the limit "per listener class".
 ```JavaScript
 emitter.setListenerMaxCount(5, this); // "this" or any instance of listener's class
 ```
-Because we can now be as granular as needed, default limit is set to `1`. This means you only have to run a given code twice to detect a leak.
+Because this way of counting is more flexible, we can now set the default limit to `1`. This means you can detect leaks much earlier: back then you might have to run through faulty code 10 times to see the warning.
+
+And for cases where you need `n` listeners of the same class `A`, you can call `emitter.setListenerMaxCount(n, new A())` and you will know as soon as `n + 1` listeners of class `A` are set. In the meantime, the limit remains 1 for your class `B` (imagine you have a singleton `B`).
 
 #### No more listening to nonexistent events
 With all EventEmitter implementations I have seen so far, you can listen to an *inexistant* event forever. Nothing will happen until you find your bug. This is surprising because there was a very cheap way for doing this at EventEmitter's level: simply by having each legit event *declared*.
@@ -153,3 +155,44 @@ Special events:
 - `eventNames`: a bit too "dynamic"? You can use `listenerCount(eventId)` to see how many listeners for a given eventId. If you don't know which eventId you are interested in, you are probably in a kind of trouble already.
 - `removeAllListeners`: who was supposed to call this API anyway? It looks more like a termination/cleanup method, to remove all dependencies before shutting down your app/system. If implemented later, should probably be named differently.
 - `removeListener`: `nice-emitter` does not allow removing while the same event is being emitted. The effort done in Node.js to obtain a "defined behavior" is respectable, but for common humans (aka coders...) there must be very few cases in which you want your system to juggle with this kind of complexity.
+
+### New API
+See sample (above) and `test/test.js` for examples of how these are used.
+
+#### declareEvent (eventId)
+Declares an event for this emitter.
+Event must be declared before `emit`, `on`, or any other event-related method is called for this event. This brings extra error checking and runtime efficiency.
+
+#### getQuickEmitter (eventId)
+Returns a "quick emitter" for a given event ID of this EventEmitter.
+Using a quick emitter to emit is quite faster (if you are chasing fractions of milliseconds).
+Returned object has methods `emit0`, `emit1`, `emit2`, `emit3` and `emitN`. You should call `quickEmitter.emit0()` if you have 0 extra parameter, and so on up to 3. If you have 4 or more parameters, you should call `emitN(...)` to which you can pass a random number of parameters (note that this is obviously less efficient).
+
+#### on (eventId, method, listener)
+Similar to Node.js API except when optional third parameter is used.
+If `listener` is passed, it will be passed as context (this) to the listening function when the event is emitted.
+This same context can also be used later to remove listeners with `off` (see below).
+Specifying your context when calling "on" is often much easier than having to track/store which functions your use to subscribe.
+If you pass a context, `nice-emitter` also checks that the same event ID is not already subscribed to with same context.
+
+#### off (eventId, listener)
+Similar to Node.js API except that if second parameter is not a function, it must be the "context" or listener used when you called `on`.
+
+#### forgetListener (listener)
+Unsubscribes the given listener (context) from all events of this emitter.
+
+#### setListenerMaxCount (maxCount, listener)
+Sets the limit listener count for *this* emitter and *listener class* objects.
+Default is 1 for all classes when this API is not called.
+If the limit is passed, an error is thrown or logged, unless debug level is set to `NO_DEBUG` (see `setDebugLevel` below).
+NB: you can pass any instance of listener's class.
+
+#### EventEmitter.setDebugLevel (level)
+Sets debug level. `level` must be one of:
+- `EventEmitter.DEBUG_THROW`: Debug checks; errors are thrown
+- `EventEmitter.DEBUG_ERROR`: Debug checks; errors go to `console.error`
+- `EventEmitter.NO_DEBUG`: No checks except those that avoid crashes
+
+Default debug mode is `DEBUG_THROW` - helps you debug your code by crashing early when something is wrong.
+`DEBUG_ERROR` is a good choice for production code (remember to overwrite `console.error`).
+`NO_DEBUG` can *sometimes* give you a bit of extra speed - but should you really be emitting that much? `NO_DEBUG` also saves some memory, if you really create a huge number of emitters.

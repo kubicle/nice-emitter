@@ -38,6 +38,12 @@ EventEmitter.setDebugLevel = function (level) {
 
 //--- Emitter side
 
+/**
+ * Declares an event for this emitter.
+ * Event must be declared before emit, on, or any other event-related method is called for this event.
+ *
+ * @param {string} eventId
+ */
 EventEmitter.prototype.declareEvent = function (eventId) {
     if (this._listenersPerEventId[eventId] !== undefined) {
         return throwOrConsole('Event ID declared twice: ', getAsText(this, eventId));
@@ -77,6 +83,12 @@ EventEmitter.prototype.getQuickEmitter = function (eventId) {
     return listenerList;
 };
 
+/**
+ * Tells how many listeners are currently subscribed to given event ID.
+ *
+ * @param {string} eventId
+ * @returns {number} number of listeners on this specific event
+ */
 EventEmitter.prototype.listenerCount = function listenerCount (eventId) {
     var listenerList = this._listenersPerEventId[eventId];
     if (listenerList === undefined) {
@@ -93,7 +105,7 @@ EventEmitter.prototype.listenerCount = function listenerCount (eventId) {
  *
  * @param {string} eventId
  * @param {function} method - can be a simple function too
- * @param {object|string|undefined} listener - if not passed, "this" will be passed as context when event occurs
+ * @param {object|string|undefined} listener - if not passed, emitter will be passed as context when event occurs
  * @returns {EventEmitter} this
  */
 EventEmitter.prototype.on = function (eventId, method, listener) {
@@ -113,8 +125,8 @@ EventEmitter.prototype.addListener = EventEmitter.prototype.on;
 
 /**
  * Unsubscribes from an event.
- * NB: specifying your listeners when calling "on" is often much easier
- * than having to track/store which functions your use to register.
+ * Specifying your listeners when calling "on" is often much easier
+ * than having to track/store which functions you passed when subscribing.
  *
  * @param {string} eventId
  * @param {object|string|function} listener - same "listener" you passed when you called "on"
@@ -138,12 +150,24 @@ EventEmitter.prototype.off = function (eventId, listener) {
 };
 EventEmitter.prototype.removeListener = EventEmitter.prototype.off;
 
+/**
+ * Unsubscribes the given listener (context) from all events of this emitter
+ *
+ * @param {object|string} listener
+ */
 EventEmitter.prototype.forgetListener = function (listener) {
     for (var eventId in this._listenersPerEventId) {
         this.off(eventId, listener);
     }
 };
 
+/**
+ * Sets the limit listener count for this emitter and listener class objects.
+ * Default is 1 for all classes when this API is not called.
+ *
+ * @param {number} maxCount
+ * @param {object|string} listener
+ */
 EventEmitter.prototype.setListenerMaxCount = function (maxCount, listener) {
     if (debugLevel === 0) return;
     if (!(maxCount > 0) || !listener) {
