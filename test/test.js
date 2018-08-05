@@ -353,8 +353,18 @@ function oldApiTest () {
     var fn2 = function () {};
     signaler.removeListener('signal1', fn); // no effect if never set
     signaler.addListener('signal1', fn); // synonym of "on"
+
+    // listen twice is allowed if you don't use context and called setMaxListeners beforehand
+    signaler.setMaxListeners(2);
+    signaler.addListener('signal1', fn);
+    checkResult(true, signaler.emit('signal1', 'hi'));
+    checkResult(2, callCount);
+    // Now call again - we have only 1 listener
+    callCount = 0;
+    signaler.removeListener('signal1', fn);
     checkResult(true, signaler.emit('signal1', 'hi'));
     checkResult(1, callCount);
+
     signaler.removeListener('signal1', fn2); // no effect if never set (and another function is listening)
     signaler.removeListener('signal1', fn);
     signaler.removeListener('signal1', fn); // no effect if already removed
@@ -362,11 +372,11 @@ function oldApiTest () {
     checkResult(false, signaler.emit('signal1', 'hey'));
     checkResult(1, callCount);
 
+    signaler.setMaxListeners(1);
     signaler.on('signal1', fn);
-    checkException('Too many listeners: MySignaler.on(\'signal1\', fn). Use MySignaler.setMaxListeners(n) with n >= 2. Even better: specify your listeners when calling "on"',
-        function () {
-            signaler.on('signal1', fn2);
-        });
+    checkException('Too many listeners: MySignaler.on(\'signal1\', fn). Use MySignaler.setMaxListeners(n) with n >= 2. Even better: specify your listeners when calling "on"', function () {
+        signaler.on('signal1', fn2);
+    });
     signaler.setMaxListeners(2);
     signaler.on('signal1', fn2); // when more than 1 fn an array is used
     signaler.off('signal1', fn2); // off here calls old API's removeListener
