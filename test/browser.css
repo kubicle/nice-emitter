@@ -1,0 +1,28 @@
+body {
+    background-color: #004;
+    color: #ccc;
+    font-family: Arial, Helvetica, sans-serif;
+}
+
+.title {
+    color: #fff;
+    font-size: 120%;
+    margin: 1.5rem 0 1rem;
+}
+
+.infos {
+    color: #b6c2fa;
+    font-style: italic;
+}
+
+.section {
+    color: #fff;
+    margin-top: 1.5rem;
+}
+
+.logLine.warning {
+    color: #dea166;
+}
+.logLine.super {
+    color: #0ebc51;
+}
