@@ -46,6 +46,48 @@ addTest('NE', function addRemove () {
     ne.declareEvent('foo');
 });
 
+addTest('EE3', function addRemoveThird () {
+    ee3.on('foo', handle);
+    ee3.removeListener('foo', handle);
+}, function setup () {
+    ee3 = new EE3();
+    ee3.on('foo', bar);
+    ee3.on('foo', baz);
+});
+addTest('NE', function addRemoveThird () {
+    ne.on('foo', handle);
+    ne.removeListener('foo', handle);
+}, function setup () {
+    ne = new EventEmitter();
+    ne.declareEvent('foo');
+    ne.setMaxListeners(3);
+    ne.on('foo', bar);
+    ne.on('foo', baz);
+});
+
+addTest('EE3', function addRemoveCrossed () {
+    ee3.on('foo', baz);
+    ee3.removeListener('foo', bar);
+    ee3.on('foo', bar);
+    ee3.removeListener('foo', baz);
+}, function setup () {
+    ee3 = new EE3();
+    ee3.on('foo', handle);
+    ee3.on('foo', bar);
+});
+addTest('NE', function addRemoveCrossed () {
+    ne.on('foo', baz);
+    ne.removeListener('foo', bar);
+    ne.on('foo', bar);
+    ne.removeListener('foo', baz);
+}, function setup () {
+    ne = new EventEmitter();
+    ne.declareEvent('foo');
+    ne.setMaxListeners(3);
+    ne.on('foo', handle);
+    ne.on('foo', bar);
+});
+
 addTest('EE3', function emit () {
     ee3.emit('foo');
     ee3.emit('foo', 'bar');
@@ -173,11 +215,9 @@ function addTest (mode, test, setup) {
 
 var refCountPerMsByTestName = {};
 
-var TEST_PROD = true;
-
-function runAllBenchmark () {
+function runAllBenchmark (isProd) {
     for (var t = 0; t < tests.length; t++) {
-        var result = runBenchmark(t, TEST_PROD);
+        var result = runBenchmark(t, isProd);
         console.log(result.msg);
     }
 }
@@ -234,7 +274,7 @@ function logOneTest (result, isProd) {
 }
 
 if (typeof window === 'undefined') {
-    runAllBenchmark();
+    runAllBenchmark(process.argv[2] !== 'DEBUG');
 } else {
     exports.runBenchmark = runBenchmark;
 }
