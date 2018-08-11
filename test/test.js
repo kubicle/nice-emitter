@@ -188,7 +188,6 @@ function slowEmitErrorTest () {
 }
 
 function slowEmitTest () {
-    EventEmitter.setDebugLevel(EventEmitter.DEBUG_THROW);
     var signaler = new MySignaler();
 
     checkResult(0, signaler.listenerCount('signal1'));
@@ -559,23 +558,19 @@ function runTest () {
     rerouteConsole();
 
     basicTest();
-
     slowEmitErrorTest();
-    EventEmitter.setDebugLevel(EventEmitter.DEBUG_THROW);
-    slowEmitTest();
-    EventEmitter.setDebugLevel(EventEmitter.NO_DEBUG);
-    slowEmitTest();
-
     quickEmitErrorTest();
-    EventEmitter.setDebugLevel(EventEmitter.DEBUG_THROW);
-    quickEmitTest();
-    EventEmitter.setDebugLevel(EventEmitter.NO_DEBUG);
-    quickEmitTest();
-
     oldApiTest();
     setListenerMaxCountTest();
     nodebugTest();
     offDuringEmitTest();
+
+    EventEmitter.setDebugLevel(EventEmitter.DEBUG_THROW);
+    slowEmitTest();
+    quickEmitTest();
+    EventEmitter.setDebugLevel(EventEmitter.NO_DEBUG);
+    slowEmitTest();
+    quickEmitTest();
 
     checkConsole(undefined); // catch any missed console error here
 
