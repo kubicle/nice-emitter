@@ -5,9 +5,9 @@ Finally an EventEmitter that does what I want... and maybe what *you* want too..
 
 - often faster than many existing event emitters: benchmarked against [EventEmitter3](https://github.com/primus/eventemitter3), one of the fastest. Try it [in your browser](https://rawgit.com/kubicle/nice-emitter/master/test/index.html)!
 - more object-friendly: listeners can be objects - no need to "bind" on listening methods anymore.
-- stop listening "per listener": no more need to keep each listener function so you can remove it later.
+- you can stop listening "per listener": no more need to store each listener function so you can remove it later.
 - helps you find leaks: debug counting allows each "class" of listeners to set its own maximum number.
-- helps you avoid listening to inexistant events: emitter MUST declare which events it can emit.
+- helps you avoid listening to inexistant events: emitter must declare which events it can emit, hence it can generate an error as soon as you try to listen to an invalid event.
 
 Read below for more details about these...
 
@@ -23,7 +23,7 @@ Cost:
 - extra memory: for the binding function
 - extra CPU: to create/compile the binding function, then to run it each time the event is emitted
 
-To avoid some of the costs of "bind" you could also use a pretty ugly "self" variable:
+To avoid some of the costs of "bind" you could also use a (rather ugly) `self` variable:
 ```JavaScript
 var self = this;
 emitter.on('tap', function () { self.myMethod(); });
@@ -32,15 +32,14 @@ Or with ES6:
 ```JavaScript
 emitter.on('tap', () => this.myMethod());
 ```
-...and this worked fine until you needed to *remove* this listening function.
-To be able to remove a listening function, you had to keep it *somewhere* from the start. So you ended-up doing:
+...and this worked fine until you need to *remove* this listening function: to be able to remove it, you had to keep it *somewhere* from the start. So you ended-up doing:
 ```JavaScript
 this.myListeningFunction = function () { self.myMethod(); };
 emitter.on('tap', this.myListeningFunction);
 ...
 emitter.off('tap', this.myListeningFunction); // off and removeListener are synonyms
 ```
-When you had more than one listening functions it could quickly become verbose...
+When you had more than one listening function, it could quickly become cumbersome...
 
 #### With `nice-emitter` you simply can do:
 ```JavaScript
@@ -55,16 +54,16 @@ emitter.off('tap', this); // by passing the same context ("this") given to "on" 
 ```JavaScript
 emitter.forgetListener(this); // accross ALL events for "this" context
 ```
-NB: the context-passing feature is also provided by EventEmitter3 (but not the extra API for removal).
+NB: the context-passing feature is also provided by EventEmitter3 (but not the extra APIs for removal).
 
 ### Easier debugging of your event emitting code
 
 `nice-emitter` will help you find leaks by allowing each "class" of listeners to set its own maximum number.
 
 Ever wondered why Node.js EventEmitter sets its "leak warning" limit to 10 by default?
-This could be because this counting was designed wrongly from the start.
+This could be because this counting was designed wrong from the start.
 In most systems, there will be 0 or 1 listener to a given type of events (2 would mean a leak), or a dozen listeners like when UI components listen to one of them (the limit to decide a leak would vary a lot).
-What seems to be true for most systems is: it is always easier to decide the right limit at listener level than emitter level.
+What seems to be true for most systems is: *it is always easier to decide the right limit at listener-level than emitter-level*.
 Hence, `nice-emitter` allows to set the limit "per listener class".
 ```JavaScript
 emitter.setListenerMaxCount(5, this); // "this" or any instance of listener's class
@@ -129,6 +128,7 @@ MyListener.prototype.method2 = function () {
 
 ## Comparison with Node.js EventEmitter
 (as of Node V10.8.0; doc found at https://nodejs.org/api/events.html)
+
 The paragraphs below should help you answer the question:
 
 *"I am already using an EventEmitter in my project; can I use nice-emitter instead?"*
@@ -142,7 +142,7 @@ In alphabetical order:
 - `defaultMaxListeners`: this "max listeners" counting system is one of the reason why Node's EventEmitter is so clumsy to detect leaks. See how our `setListenerMaxCount` is making this easier.
 - `getMaxListeners`: let me know why you need this.
 - `listeners`: curious to see who used this and why... Maybe internal API for Node.js?
-- `once`: I believe it `once` is an anti-pattern. I will try to find links about this and post them, or write myself why I think so.
+- `once`: I believe that `once` is an anti-pattern. I will try to find links about this and post them, or write myself why I think so. A close-future version of `nice-emitter` will implement a safer replacement for `once`, stay posted!
 - `prependListener`: oops, I did not know this exists before reading the doc again in details... If someone out there really needs it, it can be added without much effort.
 - `prependOnceListener`: see paragraph about `once` above.
 - `rawListeners`: same remark as for `listeners` above.
@@ -166,13 +166,13 @@ Event must be declared before `emit`, `on`, or any other event-related method is
 #### getQuickEmitter (eventId)
 Returns a "quick emitter" for a given event ID of this EventEmitter.
 Using a quick emitter to emit is quite faster (if you are chasing fractions of milliseconds).
-Returned object has methods `emit0`, `emit1`, `emit2`, `emit3` and `emitN`. You should call `quickEmitter.emit0()` if you have 0 extra parameter, and so on up to 3. If you have 4 or more parameters, you should call `emitN(...)` to which you can pass a random number of parameters (note that this is obviously less efficient).
+Returned object has methods `emit0`, `emit1`, `emit2`, `emit3` and `emitN`. You should call `quickEmitter.emit0()` if you have 0 extra parameters, and so on up to 3. If you have 4 or more parameters, you should call `emitN(...)` to which you can pass a random number of parameters (but note that this is obviously less efficient).
 
 #### on (eventId, method, listener)
 Similar to Node.js API except when optional third parameter is used.
-If `listener` is passed, it will be passed as context (this) to the listening function when the event is emitted.
+If `listener` is passed, it will be passed as context (`this`) to the listening function when the event is emitted.
 This same context can also be used later to remove listeners with `off` (see below).
-Specifying your context when calling "on" is often much easier than having to track/store which functions your use to subscribe.
+Specifying your context when calling "on" is often much easier than having to track/store which functions you use to subscribe.
 If you pass a context, `nice-emitter` also checks that the same event ID is not already subscribed to with same context.
 
 #### off (eventId, listener)
