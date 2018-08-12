@@ -1617,8 +1617,6 @@ var browserConsoleLog;
 
 
 function createDom() {
-    var viewportHeight = document.documentElement.clientHeight;
-
     setMeta('viewport', 'width=device-width, initial-scale=1');
 
     createDiv(document.body, 'title', 'nice-emitter Benchmark');
@@ -1627,7 +1625,9 @@ function createDom() {
     createDiv(document.body, 'infos', 'Each test runs 3 times.');
 
     logDiv = createDiv(document.body, 'logDiv');
+
     var usedHeight = document.body.clientHeight;
+    var viewportHeight = document.documentElement.clientHeight;
     logDiv.style.height = (viewportHeight - usedHeight - 32) + 'px';
 }
 
