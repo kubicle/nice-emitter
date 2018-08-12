@@ -9,13 +9,17 @@
     },
     "scripts": {
         "browserify": "rm -rf dist && mkdir dist && browserify index.js -s NiceEmitter -o dist/nice-emitter.js",
-        "minify": "uglifyjs dist/nice-emitter.js -m -c properties=false -o dist/nice-emitter.min.js",
+        "minify": "uglifyjs dist/nice-emitter.js --source-map -cm properties=false -o dist/nice-emitter.min.js",
         "browserify-test": "browserify test/browser.js -o test/browserified-test.js",
         "prepublishOnly": "npm run browserify && npm run minify && npm run browserify-test",
         "benchmark": "node test/benchmark.js",
         "test": "node test/test.js",
         "coverage": "node node_modules/istanbul/lib/cli.js cover test/test.js"
     },
+    "files": [
+        "index.js",
+        "dist"
+    ],
     "keywords": [
         "EventEmitter",
         "EventEmitter3",
@@ -27,7 +31,8 @@
         "event",
         "pub/sub",
         "publish",
-        "subscribe"
+        "subscribe",
+        "browser"
     ],
     "author": "kubicle",
     "license": "MIT",
