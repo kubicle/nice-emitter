@@ -154,7 +154,7 @@ Special events:
 ### What is different
 - `eventNames`: a bit too "dynamic"? You can use `listenerCount(eventId)` to see how many listeners for a given eventId. If you don't know which eventId you are interested in, you are probably in a kind of trouble already.
 - `removeAllListeners`: who was supposed to call this API anyway? It looks more like a termination/cleanup method, to remove all dependencies before shutting down your app/system. If implemented later, should probably be named differently.
-- `removeListener`: `nice-emitter` does not allow removing while the same event is being emitted. The effort done in Node.js to obtain a "defined behavior" is respectable, but for common humans (aka coders...) there must be very few cases in which you want your system to juggle with this kind of complexity.
+- Order of event reception by listeners: Node.js guarantees that your listeners will receive events in the order in which they started listening. This is also true for `nice-emitter`, until you remove some of them and add others (or add them back). If you really need this order, now is a good time to ask yourself why, because your design should normally not rely on that. If you still want it this way, call `EventEmitter.respectSubscriberOrder(true)` and order will be kept, at the expense of a bit more CPU and memory.
 
 ### New API
 See sample (above) and `test/test.js` for examples of how these are used.
