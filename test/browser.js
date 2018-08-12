@@ -7,6 +7,21 @@ var logDiv;
 var browserConsoleLog;
 
 
+function createDom() {
+    var viewportHeight = document.documentElement.clientHeight;
+
+    setMeta('viewport', 'width=device-width, initial-scale=1');
+
+    createDiv(document.body, 'title', 'nice-emitter Benchmark');
+    createDiv(document.body, 'infos', 'EE3 = EventEmitter3');
+    createDiv(document.body, 'infos', 'NE = nice-emitter');
+    createDiv(document.body, 'infos', 'Each test runs 3 times.');
+
+    logDiv = createDiv(document.body, 'logDiv');
+    var usedHeight = document.body.clientHeight;
+    logDiv.style.height = (viewportHeight - usedHeight - 32) + 'px';
+}
+
 function setMeta (name, content) {
     var meta = document.head.getElementsByTagName('meta')[name];
     if (!meta) {
@@ -32,32 +47,38 @@ function redirectConsole () {
 
 function logSection (title) {
     createDiv(logDiv, 'section', title);
+    scrollToBottom();
 }
 
 function logLine (result) {
     var line = log(result.msg);
-    if (result.factor) { // factor is 0 for EE3
-        if (result.factor < 1) {
-            line.className += ' warning';
-        } else if (result.factor >= 1.5) {
-            line.className += ' super';
-        }
+    var className;
+    if (result.factor === 0) { // factor is 0 for EE3
+        className = 'ref';
+    } else if (result.factor < 1) {
+        className = 'warning';
+    } else if (result.factor >= 1.5) {
+        className = 'super';
+    } else {
+        className = 'better';
     }
+    line.className += ' ' + className;
 }
 
 function log () {
     var msg = [].join.call(arguments, ' ');
     browserConsoleLog(msg);
-    return createDiv(logDiv, 'logLine', msg);
+    var div = createDiv(logDiv, 'logLine', msg);
+    scrollToBottom();
+    return div;
 }
 
-function runItAll () {
-    setMeta('viewport', 'width=device-width, initial-scale=1');
+function scrollToBottom () {
+    logDiv.scrollTop = logDiv.scrollHeight;
+};
 
-    createDiv(document.body, 'title', 'nice-emitter Benchmark');
-    createDiv(document.body, 'infos', 'EE3 = EventEmitter3');
-    createDiv(document.body, 'infos', 'NE = nice-emitter');
-    logDiv = createDiv(document.body, 'logDiv');
+function runItAll () {
+    createDom();
 
     redirectConsole();
 

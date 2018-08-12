@@ -37,6 +37,12 @@ EventEmitter.setDebugLevel = function (level) {
     debugLevel = level;
 };
 
+var respectSubscriberOrder = false;
+
+EventEmitter.respectSubscriberOrder = function (shouldRespect) {
+    respectSubscriberOrder = shouldRespect;
+};
+
 
 //--- Emitter side
 
@@ -115,10 +121,13 @@ EventEmitter.prototype.on = function (eventId, method, listener) {
     if (!listenerList) return throwOrConsole('Invalid event ID: ', getAsText(this, eventId, listener)), this;
 
     if (debugLevel > 0) {
-        if (typeof method !== 'function' || typeof listener === 'function') {
-            return throwOrConsole('Invalid parameters to emitter.on: \'', eventId + '\', ' + typeof method + ', ' + getObjectClassname(listener)), this;
+        if (arguments.length >= 3 && (!listener || typeof listener === 'function')) {
+            return throwOrConsole('Invalid listener parameter to emitter.on \'' + eventId + '\': ', typeof listener), this;
         }
-        listenerList._countListener(listener || this, listener);
+        if (typeof method !== 'function') {
+            return throwOrConsole('Invalid function parameter to emitter.on \'' + eventId + '\': ', typeof method), this;
+        }
+        listenerList._countListener(listener || this, listener || null);
     }
     listenerList._addListener(listener || this, method);
     return this;
@@ -205,27 +214,50 @@ function ListenerList (emitter, eventId) {
     if (debugLevel > 0) {
         this._emitter = emitter; // our parent EventEmitter
         this._eventId = eventId;
-        this._isEmitting = false;
-        this._counterMap = {}; // key: listenerKey, value: count of listeners with same listenerKey
+        this._counterMap = null; // key: listenerKey, value: count of listeners with same listenerKey
     }
 }
 
 ListenerList.prototype._addListener = function (context, method) {
-    if (typeof this._methods === 'function') {
-        // 1 -> 2 # Array creation
-        this._count = 2;
-        this._methods = [this._methods, method];
-        this._objects = [this._objects, context];
-    } else if (this._count === 0) {
+    if (this._methods === null) {
         // 0 -> 1
         this._count = 1;
         this._methods = method;
         this._objects = context;
-    } else {
+    } else if (typeof this._methods !== 'function') {
         // n -> n+1 (n >= 0) # Array already exists
-        this._methods[this._count] = method;
-        this._objects[this._count++] = context;
+        var index = this._methods.length;
+        if (index !== this._count) {
+            if (index > 5 && index > this._count * 2) {
+                this._compactList(this._count + 1);
+                index = this._count;
+            } else if (respectSubscriberOrder) {
+                while (index >= 1 && !this._methods[index - 1]) index--;
+            } else {
+                for (index = 0; this._methods[index]; index++) ; // this._methods.indexOf(null) seems slower
+            }
+        }
+        this._methods[index] = method;
+        this._objects[index] = context;
+        this._count++;
+    } else {
+        // 1 -> 2 # Array creation
+        this._count = 2;
+        this._methods = [this._methods, method];
+        this._objects = [this._objects, context];
     }
+};
+
+ListenerList.prototype._compactList = function (size) {
+    var methods = new Array(size), objects = new Array(size);
+    for (var i = 0, j = 0; j < this._count; i++) {
+        if (this._methods[i]) {
+            methods[j] = this._methods[i];
+            objects[j++] = this._objects[i];
+        }
+    }
+    this._methods = methods;
+    this._objects = objects;
 };
 
 ListenerList.prototype._findListener = function (listener) {
@@ -250,25 +282,28 @@ ListenerList.prototype._removeListener = function (index, listener) {
         this._methods = null;
         this._objects = null;
     } else {
-        for (var i = index; i < this._count; i++) {
-            this._methods[i] = this._methods[i + 1];
-            this._objects[i] = this._objects[i + 1];
-        }
-        this._methods[i] = null;
-        this._objects[i] = null;
+        this._methods[index] = null;
+        this._objects[index] = null;
     }
 
     if (debugLevel > 0) {
         var listenerKey = getObjectClassname(listener);
         this._counterMap[listenerKey]--;
-        if (this._isEmitting) throwOrConsole('Removed listener during emit: ', getAsText(this._emitter, this._eventId, listener));
     }
 };
 
 // Only used if debugLevel > 0
 ListenerList.prototype._countListener = function (context, listener) {
     var listenerKey = getObjectClassname(listener);
-    var currentCount = (this._counterMap[listenerKey] || 0) + 1;
+
+    var currentCount;
+    if (!this._counterMap) {
+        this._counterMap = { 0: 0 };
+        currentCount = 1;
+    } else {
+        currentCount = (this._counterMap[listenerKey] || 0) + 1
+    }
+
     var maxListenerCount = this._emitter._maxCountPerListenerKey[listenerKey] || 1;
     if (currentCount > maxListenerCount) {
         var msg = 'Too many listeners: ' + getAsText(this._emitter, this._eventId, listener) + '. ';
@@ -287,71 +322,66 @@ ListenerList.prototype._countListener = function (context, listener) {
 
 ListenerList.prototype.emit0 = function () {
     if (this._count === 0) return false; // 0 listeners
-    if (debugLevel > 0) this._isEmitting = true;
 
     if (typeof this._methods === 'function') {
         this._methods.call(this._objects);
     } else {
-        for (var i = 0; i < this._count; i++) { this._methods[i].call(this._objects[i]); }
+        var methods = this._methods, objects = this._objects, len = this._methods.length;
+        for (var i = 0; i < len; i++) { var m = methods[i]; m && m.call(objects[i]); }
     }
 
-    if (debugLevel > 0) this._isEmitting = false;
     return true;
 };
 
 ListenerList.prototype.emit1 = function (arg1) {
     if (this._count === 0) return false; // 0 listeners
-    if (debugLevel > 0) this._isEmitting = true;
 
     if (typeof this._methods === 'function') {
         this._methods.call(this._objects, arg1);
     } else {
-        for (var i = 0; i < this._count; i++) { this._methods[i].call(this._objects[i], arg1); }
+        var methods = this._methods, objects = this._objects, len = this._methods.length;
+        for (var i = 0; i < len; i++) { var m = methods[i]; m && m.call(objects[i], arg1); }
     }
 
-    if (debugLevel > 0) this._isEmitting = false;
     return true;
 };
 
 ListenerList.prototype.emit2 = function (arg1, arg2) {
     if (this._count === 0) return false; // 0 listeners
-    if (debugLevel > 0) this._isEmitting = true;
 
     if (typeof this._methods === 'function') {
         this._methods.call(this._objects, arg1, arg2);
     } else {
-        for (var i = 0; i < this._count; i++) { this._methods[i].call(this._objects[i], arg1, arg2); }
+        var methods = this._methods, objects = this._objects, len = this._methods.length;
+        for (var i = 0; i < len; i++) { var m = methods[i]; m && m.call(objects[i], arg1, arg2); }
     }
 
-    if (debugLevel > 0) this._isEmitting = false;
     return true;
 };
 
 ListenerList.prototype.emit3 = function (arg1, arg2, arg3) {
     if (this._count === 0) return false; // 0 listeners
-    if (debugLevel > 0) this._isEmitting = true;
 
     if (typeof this._methods === 'function') {
         this._methods.call(this._objects, arg1, arg2, arg3);
     } else {
-        for (var i = 0; i < this._count; i++) { this._methods[i].call(this._objects[i], arg1, arg2, arg3); }
+        var methods = this._methods, objects = this._objects, len = this._methods.length;
+        for (var i = 0; i < len; i++) { var m = methods[i]; m && m.call(objects[i], arg1, arg2, arg3); }
     }
 
-    if (debugLevel > 0) this._isEmitting = false;
     return true;
 };
 
 ListenerList.prototype.emitN = function () {
     if (this._count === 0) return false; // 0 listeners
-    if (debugLevel > 0) this._isEmitting = true;
 
     if (typeof this._methods === 'function') {
         this._methods.apply(this._objects, arguments);
     } else {
-        for (var i = 0; i < this._count; i++) { this._methods[i].apply(this._objects[i], arguments); }
+        var methods = this._methods, objects = this._objects, len = this._methods.length;
+        for (var i = 0; i < len; i++) { var m = methods[i]; m && m.apply(objects[i], arguments); }
     }
 
-    if (debugLevel > 0) this._isEmitting = false;
     return true;
 };
 
@@ -364,7 +394,7 @@ function throwOrConsole (msg, info) {
     console.error(msg + info);
 }
 
-var DEFAULT_LISTENER = '<default>';
+var DEFAULT_LISTENER = 0; // Using 0 is a bit faster for old API when in debug mode
 
 function getObjectClassname (listener) {
     if (!listener) return DEFAULT_LISTENER;
@@ -374,7 +404,7 @@ function getObjectClassname (listener) {
 }
 
 function getAsText (emitter, eventId, listener) {
-    if (listener === undefined || typeof listener === 'function') {
+    if (!listener || typeof listener === 'function') {
         return getObjectClassname(emitter) + '.on(\'' + eventId + '\', fn)';
     } else {
         return getObjectClassname(emitter) + '.on(\'' + eventId + '\', fn, ' + getObjectClassname(listener) + ')';
@@ -1190,6 +1220,7 @@ function hasOwnProperty(obj, prop) {
 
 }).call(this,require('_process'),typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
 },{"./support/isBuffer":4,"_process":3,"inherits":2}],6:[function(require,module,exports){
+(function (process){
 /**
  * This simple benchmark is measuring nice-emitter against EventEmitter3 (EE3),
  * using a subset of EE3's own benchmark.
@@ -1199,137 +1230,198 @@ function hasOwnProperty(obj, prop) {
  */
 
 var EventEmitter = require('../index.js');
-var EE3 = require('eventemitter3');
+var EventEmitter3 = require('eventemitter3');
+var NiceEmitter03 = require('nice-emitter');
 
-var tests = [];
+var STANDARD = 'std'; // test is complying 100% to Node.js API
+var MIN_RUN_MS = 1000;
 
-var ee3, ne, qne;
+var testList = [];
+var testMap = {};
+var testOrder = null; // array of test "modes"
+var refCode = '';
+var refCountPerMsByTestName = {};
+
+var ee, ee3, ne, qne;
 
 function handle() {
     if (arguments.length > 100) console.log('damn');
 }
-
 function foo() {
     if (arguments.length > 100) console.log('damn');
     return 1;
 }
-
 function bar() {
     if (arguments.length > 100) console.log('damn');
     return false;
 }
-
+function bar2() {
+    if (arguments.length > 100) console.log('damn');
+    return false;
+}
 function baz() {
     if (arguments.length > 100) console.log('damn');
     return true;
 }
+function baz2() {
+    if (arguments.length > 100) console.log('damn');
+    return true;
+}
 
-addTest('EE3', function addRemove () {
-    ee3.on('foo', handle);
-    ee3.removeListener('foo', handle);
-}, function setup () {
-    ee3 = new EE3();
+addTestStandard(function addRemove () {
+    ee.on('foo', handle);
+    ee.removeListener('foo', handle);
+}, function setup (Constructor) {
+    ee = new Constructor();
 });
-addTest('NE', function addRemove () {
+addTestNice('NE', function addRemove () {
     ne.on('foo', handle);
     ne.removeListener('foo', handle);
-}, function setup () {
-    ne = new EventEmitter();
+}, function setup (Constructor) {
+    ne = new Constructor();
     ne.declareEvent('foo');
 });
 
-addTest('EE3', function emit () {
-    ee3.emit('foo');
-    ee3.emit('foo', 'bar');
-    ee3.emit('foo', 'bar', 'baz');
-    ee3.emit('foo', 'bar', 'baz', 'boom');
-}, function setup () {
-    ee3 = new EE3();
-    ee3.on('foo', handle);
+addTestStandard(function addRemoveThird () {
+    ee.removeListener('foo', handle);
+    ee.on('foo', handle);
+}, function setup (Constructor) {
+    ee = new Constructor();
+    ee.on('foo', bar);
+    ee.on('foo', baz);
+    ee.on('foo', handle);
+    ee.on('foo', bar2);
+    ee.on('foo', baz2);
 });
-addTest('NE', function emit () {
+addTestNice('NE', function addRemoveThird () {
+    ne.removeListener('foo', handle);
+    ne.on('foo', handle);
+}, function setup (Constructor) {
+    ne = new Constructor();
+    ne.declareEvent('foo');
+    ne.setMaxListeners(5);
+    ne.on('foo', bar);
+    ne.on('foo', baz);
+    ne.on('foo', handle);
+    ne.on('foo', bar2);
+    ne.on('foo', baz2);
+});
+
+addTestStandard(function addRemoveCrossed () {
+    ee.on('foo', baz);
+    ee.removeListener('foo', bar);
+    ee.on('foo', bar);
+    ee.removeListener('foo', baz);
+}, function setup (Constructor) {
+    ee = new Constructor();
+    ee.on('foo', handle);
+    ee.on('foo', bar);
+});
+addTestNice('NE', function addRemoveCrossed () {
+    ne.on('foo', baz);
+    ne.removeListener('foo', bar);
+    ne.on('foo', bar);
+    ne.removeListener('foo', baz);
+}, function setup (Constructor) {
+    ne = new Constructor();
+    ne.declareEvent('foo');
+    ne.setMaxListeners(3);
+    ne.on('foo', handle);
+    ne.on('foo', bar);
+});
+
+addTestStandard(function emit () {
+    ee.emit('foo');
+    ee.emit('foo', 'bar');
+    ee.emit('foo', 'bar', 'baz');
+    ee.emit('foo', 'bar', 'baz', 'boom');
+}, function setup (Constructor) {
+    ee = new Constructor();
+    ee.on('foo', handle);
+});
+addTestNice('NE', function emit () {
     ne.emit('foo');
     ne.emit('foo', 'bar');
     ne.emit('foo', 'bar', 'baz');
     ne.emit('foo', 'bar', 'baz', 'boom');
-}, function setup () {
-    ne = new EventEmitter();
+}, function setup (Constructor) {
+    ne = new Constructor();
     ne.declareEvent('foo');
     ne.on('foo', handle);
 });
-addTest('NE quickEmit', function emit () {
+addTestNice('NEQ', function emit () {
     qne.emit0();
     qne.emit1('bar');
     qne.emit2('bar', 'baz');
     qne.emit3('bar', 'baz', 'boom');
-}, function setup () {
-    ne = new EventEmitter();
+}, function setup (Constructor) {
+    ne = new Constructor();
     ne.declareEvent('foo');
     qne = ne.getQuickEmitter('foo');
     ne.on('foo', handle);
 });
 
-addTest('EE3', function emitMultiListeners () {
-    ee3.emit('foo');
-    ee3.emit('foo', 'bar');
-    ee3.emit('foo', 'bar', 'baz');
-    ee3.emit('foo', 'bar', 'baz', 'boom');
-}, function setup () {
-    ee3 = new EE3();
-    ee3.on('foo', foo).on('foo', bar).on('foo', baz);
+addTestStandard(function emitMultiListeners () {
+    ee.emit('foo');
+    ee.emit('foo', 'bar');
+    ee.emit('foo', 'bar', 'baz');
+    ee.emit('foo', 'bar', 'baz', 'boom');
+}, function setup (Constructor) {
+    ee = new Constructor();
+    ee.on('foo', foo).on('foo', bar).on('foo', baz);
 });
-addTest('NE', function emitMultiListeners () {
+addTestNice('NE', function emitMultiListeners () {
     ne.emit('foo');
     ne.emit('foo', 'bar');
     ne.emit('foo', 'bar', 'baz');
     ne.emit('foo', 'bar', 'baz', 'boom');
-}, function setup () {
-    ne = new EventEmitter();
+}, function setup (Constructor) {
+    ne = new Constructor();
     ne.setMaxListeners(3); // other way was: ne.on('foo', foo, 'a').on('foo', bar, 'b').on('foo', baz, 'c')
     ne.declareEvent('foo');
     ne.on('foo', foo).on('foo', bar).on('foo', baz);
 });
 
-addTest('EE3', function context () {
-    ee3.emit('foo');
-    ee3.emit('foo', 'bar');
-    ee3.emit('foo', 'bar', 'baz');
-    ee3.emit('foo', 'bar', 'baz', 'boom');
-}, function setup () {
-    ee3 = new EE3();
+addTestStandard(function context () {
+    ee.emit('foo');
+    ee.emit('foo', 'bar');
+    ee.emit('foo', 'bar', 'baz');
+    ee.emit('foo', 'bar', 'baz', 'boom');
+}, function setup (Constructor) {
+    ee = new Constructor();
     var ctx = { foo: 'bar' };
-    ee3.on('foo', handle, ctx);
+    ee.on('foo', handle, ctx);
 });
-addTest('NE', function context () {
+addTestNice('NE', function context () {
     ne.emit('foo');
     ne.emit('foo', 'bar');
     ne.emit('foo', 'bar', 'baz');
     ne.emit('foo', 'bar', 'baz', 'boom');
-}, function setup () {
-    ne = new EventEmitter();
+}, function setup (Constructor) {
+    ne = new Constructor();
     ne.declareEvent('foo');
     var ctx = { foo: 'bar' };
     ne.on('foo', handle, ctx);
 });
 
-addTest('EE3', function hundreds () {
+addTestStandard(function hundreds () {
     for (var i = 0; i < 10; i++) {
-        ee3.emit('event:' + i);
+        ee.emit('event:' + i);
     }
-}, function setup () {
-    ee3 = new EE3();
+}, function setup (Constructor) {
+    ee = new Constructor();
     for (var i = 0; i < 10; i++) {
         for (var j = 0; j < 10; j++) {
-            ee3.on('event:' + i, foo);
+            ee.on('event:' + i, foo);
         }
     }
 });
-addTest('NE', function hundreds () {
+addTestNice('NE', function hundreds () {
     for (var i = 0; i < 10; i++) {
         ne.emit('event:' + i);
     }
-}, function setup () {
-    ne = new EventEmitter();
+}, function setup (Constructor) {
+    ne = new Constructor();
     ne.setMaxListeners(10);
     for (var i = 0; i < 10; i++) {
         ne.declareEvent('event:' + i);
@@ -1338,12 +1430,12 @@ addTest('NE', function hundreds () {
         }
     }
 });
-addTest('NE quickEmit', function hundreds () {
+addTestNice('NEQ', function hundreds () {
     for (var i = 0; i < 10; i++) {
         ne.quickEmits[i].emit0();
     }
-}, function setup () {
-    ne = new EventEmitter();
+}, function setup (Constructor) {
+    ne = new Constructor();
     ne.setMaxListeners(10);
     ne.quickEmits = [];
     for (var i = 0; i < 10; i++) {
@@ -1357,19 +1449,93 @@ addTest('NE quickEmit', function hundreds () {
 
 //---
 
-var MIN_RUN_MS = 1000;
-
-function addTest (mode, test, setup) {
-    tests.push({ mode: mode, test: test, setup: setup });
+function addTestStandard (testFn, setup) {
+    var decl = { name: testFn.name, modes: {}};
+    testMap[testFn.name] = decl;
+    testList.push(decl);
+    decl.modes[STANDARD] = new TestMode(decl, STANDARD, testFn, setup);
 }
 
-var refCountPerMsByTestName = {};
+function addTestNice (mode, testFn, setup) {
+    var decl = testMap[testFn.name];
+    decl.modes[mode] = new TestMode(decl, mode, testFn, setup);
+}
 
-var TEST_PROD = true;
+function TestMode (decl, code, testFn, setup, isRef) {
+    this.decl = decl;
+    this.code = code;
+    this.testFn = testFn;
+    this.setup = setup;
+    this.isReference = isRef;
+}
 
-function runAllBenchmark () {
-    for (var t = 0; t < tests.length; t++) {
-        var result = runBenchmark(t, TEST_PROD);
+function initTestOrder (refCode, testName) {
+    refCode = refCode || 'ee3';
+
+    testOrder = [];
+    var list = testList;
+    if (testName) list = [testMap[testName]];
+
+    for (var i = 0; i < list.length; i++) {
+        var modes = list[i].modes;
+        var modeRef, mode2, modeQ = modes['NEQ'], modeRefQ = null;
+        if (modeQ) modeQ.code = 'NE Quick';
+
+        switch (refCode) {
+        case 'reg':
+            mode2 = modes['NE'];
+            modeRef = new TestMode(mode2.decl, 'NE0.3', mode2.testFn, mode2.setup, true);
+            if (modeQ) modeRefQ = new TestMode(modeQ.decl, 'NE0.3 Quick', modeQ.testFn, modeQ.setup, true);
+            break;
+        case 'ee3':
+            modeRef = modes[STANDARD];
+            modeRef.code = 'EE3';
+            modeRef.isReference = true;
+            mode2 = modes['NE'];
+            break;
+        case 'ne':
+            modeRef = modes['NE'];
+            modeRef.isReference = true;
+            break;
+        case 'ne03':
+            var mode = modes['NE'];
+            modeRef = new TestMode(mode.decl, 'NE0.3', mode.testFn, mode.setup, true);
+            break;
+        default:
+            throw new Error('Invalid ref code: ' + refCode);
+        }
+
+        for (var n = 0; n < 3; n++) {
+            testOrder.push(modeRef);
+            if (mode2) testOrder.push(mode2);
+            if (modeRefQ) testOrder.push(modeRefQ);
+            if (modeQ) testOrder.push(modeQ);
+        }
+    }
+}
+
+TestMode.prototype.runSetup = function (isProd) {
+    var Constructor;
+
+    if (this.code.startsWith('NE0.3')) {
+        NiceEmitter03.setDebugLevel(isProd ? NiceEmitter03.NO_DEBUG : NiceEmitter03.DEBUG_THROW);
+        Constructor = NiceEmitter03;
+    } else if (this.code.startsWith('NE')) {
+        Constructor = EventEmitter; // nice-emitter latest
+        EventEmitter.setDebugLevel(isProd ? EventEmitter.NO_DEBUG : EventEmitter.DEBUG_THROW);
+    } else if (this.code.startsWith('EE3')) {
+        Constructor = EventEmitter3;
+    } else {
+        throw new Error('Invalid code: ' + this.code);
+    }
+
+    this.setup(Constructor);
+};
+
+function runAllBenchmark (isProd, refCode, testName) {
+    initTestOrder(refCode, testName);
+    for (var t = 0; t < testOrder.length; t++) {
+        var result = runBenchmark(t, isProd);
         console.log(result.msg);
     }
 }
@@ -1377,24 +1543,32 @@ function runAllBenchmark () {
 /**
  * Runs one benchmark test
  *
- * @param {number} index - index of requested benchmark
+ * @param {number} index - index of requested benchmark (0..n)
  * @param {boolean} isProd - true if PROD mode (no debug check) should be used
- * @returns {number|null} - null if index is out of range; otherwise ratio compared to ref (-1 if this was ref)
+ * @param {string} [refCode] - default is "EE3"; "reg" to compare with NE0.3
+ * @param {string} [testName] - if only this test should run
+ * @returns {object|null} - null if index is out of range; otherwise results of test
  */
-function runBenchmark (index, isProd) {
-    EventEmitter.setDebugLevel(isProd ? EventEmitter.NO_DEBUG : EventEmitter.DEBUG_THROW);
+function runBenchmark (index, isProd, refCode, testName) {
+    if (!testOrder) initTestOrder(refCode, testName);
 
-    var decl = tests[index];
-    if (!decl) return null;
-    if (decl.setup) {
-        decl.setup();
-    }
+    var mode = testOrder[index];
+    if (!mode) return null;
 
-    return logOneTest(runOneTest(decl), isProd);
+    mode.runSetup(isProd);
+    var result = runOneTest(mode.testFn);
+
+    return logOneTest(mode, result, isProd);
 }
 
-function runOneTest (decl) {
-    var fn = decl.test;
+function TestResult (count, duration) {
+    this.count = count;
+    this.duration = duration;
+    this.factor = 0;
+    this.msg = '';
+}
+
+function runOneTest (fn) {
     var t0 = Date.now();
     var count = 0, duration = 0;
 
@@ -1404,18 +1578,18 @@ function runOneTest (decl) {
         duration = Date.now() - t0;
     }
 
-    return { decl: decl, count: count, duration: duration };
+    return new TestResult(count, duration);
 }
 
-function logOneTest (result, isProd) {
-    var testName = result.decl.test.name;
-    var mode = result.decl.mode;
+function logOneTest (mode, result, isProd) {
+    var testName = mode.decl.name;
+    var code = mode.code;
     var countPerMs = result.count / result.duration;
-    var sufix = mode, factorStr = '';
-    if (mode === 'EE3') {
+    var sufix = code, factorStr = '';
+    if (mode.isReference) {
         refCountPerMsByTestName[testName] = countPerMs;
         result.factor = 0;
-    } else if (mode.startsWith('NE')) {
+    } else {
         sufix += ' ' + (isProd ? 'PROD' : 'DEBUG');
         result.factor = countPerMs / refCountPerMsByTestName[testName];
         factorStr = '   [x ' + result.factor.toFixed(2) + ']';
@@ -1426,12 +1600,13 @@ function logOneTest (result, isProd) {
 }
 
 if (typeof window === 'undefined') {
-    runAllBenchmark();
+    runAllBenchmark(process.argv[2] !== 'DEBUG', process.argv[3], process.argv[4]);
 } else {
     exports.runBenchmark = runBenchmark;
 }
 
-},{"../index.js":1,"eventemitter3":8}],7:[function(require,module,exports){
+}).call(this,require('_process'))
+},{"../index.js":1,"_process":3,"eventemitter3":8,"nice-emitter":9}],7:[function(require,module,exports){
 'use strict';
 
 var runBenchmark = require('./benchmark').runBenchmark;
@@ -1440,6 +1615,21 @@ var runTest = require('./test').runTest;
 var logDiv;
 var browserConsoleLog;
 
+
+function createDom() {
+    var viewportHeight = document.documentElement.clientHeight;
+
+    setMeta('viewport', 'width=device-width, initial-scale=1');
+
+    createDiv(document.body, 'title', 'nice-emitter Benchmark');
+    createDiv(document.body, 'infos', 'EE3 = EventEmitter3');
+    createDiv(document.body, 'infos', 'NE = nice-emitter');
+    createDiv(document.body, 'infos', 'Each test runs 3 times.');
+
+    logDiv = createDiv(document.body, 'logDiv');
+    var usedHeight = document.body.clientHeight;
+    logDiv.style.height = (viewportHeight - usedHeight - 32) + 'px';
+}
 
 function setMeta (name, content) {
     var meta = document.head.getElementsByTagName('meta')[name];
@@ -1466,32 +1656,38 @@ function redirectConsole () {
 
 function logSection (title) {
     createDiv(logDiv, 'section', title);
+    scrollToBottom();
 }
 
 function logLine (result) {
     var line = log(result.msg);
-    if (result.factor) { // factor is 0 for EE3
-        if (result.factor < 1) {
-            line.className += ' warning';
-        } else if (result.factor >= 1.5) {
-            line.className += ' super';
-        }
+    var className;
+    if (result.factor === 0) { // factor is 0 for EE3
+        className = 'ref';
+    } else if (result.factor < 1) {
+        className = 'warning';
+    } else if (result.factor >= 1.5) {
+        className = 'super';
+    } else {
+        className = 'better';
     }
+    line.className += ' ' + className;
 }
 
 function log () {
     var msg = [].join.call(arguments, ' ');
     browserConsoleLog(msg);
-    return createDiv(logDiv, 'logLine', msg);
+    var div = createDiv(logDiv, 'logLine', msg);
+    scrollToBottom();
+    return div;
 }
 
-function runItAll () {
-    setMeta('viewport', 'width=device-width, initial-scale=1');
+function scrollToBottom () {
+    logDiv.scrollTop = logDiv.scrollHeight;
+};
 
-    createDiv(document.body, 'title', 'nice-emitter Benchmark');
-    createDiv(document.body, 'infos', 'EE3 = EventEmitter3');
-    createDiv(document.body, 'infos', 'NE = nice-emitter');
-    logDiv = createDiv(document.body, 'logDiv');
+function runItAll () {
+    createDom();
 
     redirectConsole();
 
@@ -1535,7 +1731,7 @@ function runOneStep () {
 
 runItAll();
 
-},{"./benchmark":6,"./test":9}],8:[function(require,module,exports){
+},{"./benchmark":6,"./test":10}],8:[function(require,module,exports){
 'use strict';
 
 var has = Object.prototype.hasOwnProperty
@@ -1874,6 +2070,389 @@ if ('undefined' !== typeof module) {
 }
 
 },{}],9:[function(require,module,exports){
+'use strict';
+/**
+ * Nice EventEmitter
+ * - more object-friendly: listeners can be objects (i.e. no need to "bind" on listening methods)
+ * - easier to find leaks: debug counting allows each "class" of listeners to set its own maximum number
+ * - easier to stop listening: per listener (i.e. no need to keep track of each "on" so you can "remove" later)
+ * - easier to avoid mistake of listening to inexistant event: emitter MUST declare which events it can emit
+ * - often faster than many existing event emitters
+ */
+function EventEmitter () {
+    this._listenersPerEventId = {};
+
+    if (debugLevel > 0) {
+        this._maxCountPerListenerKey = {};
+    }
+}
+module.exports = EventEmitter;
+
+
+EventEmitter.NO_DEBUG = 0;    // No checks except those that avoid crashes
+EventEmitter.DEBUG_ERROR = 1; // Debug checks; errors go to console.error
+EventEmitter.DEBUG_THROW = 2; // Debug checks; errors are thrown
+
+var debugLevel = EventEmitter.DEBUG_THROW;
+
+/**
+ * Sets debug level.
+ * Default debug mode is DEBUG_THROW - helps you debug your code by crashing.
+ * DEBUG_ERROR is a good choice for production code.
+ * NO_DEBUG can *sometimes* give you a bit of extra speed - but should you really be emitting that much?
+ * NO_DEBUG also saves some memory - if you really create a huge number of emitters...
+ *
+ * @param {number} level - e.g. EventEmitter.DEBUG_ERROR (console.error messages) or EventEmitter.NO_DEBUG
+ */
+EventEmitter.setDebugLevel = function (level) {
+    debugLevel = level;
+};
+
+
+//--- Emitter side
+
+/**
+ * Declares an event for this emitter.
+ * Event must be declared before emit, on, or any other event-related method is called for this event.
+ *
+ * @param {string} eventId
+ */
+EventEmitter.prototype.declareEvent = function (eventId) {
+    if (this._listenersPerEventId[eventId] !== undefined) {
+        return throwOrConsole('Event ID declared twice: ', getAsText(this, eventId));
+    }
+
+    this._listenersPerEventId[eventId] = new ListenerList(this, eventId);
+};
+
+EventEmitter.prototype.emit = function (eventId, p1, p2, p3) {
+    var listenerList = this._listenersPerEventId[eventId];
+    if (listenerList === undefined) {
+        throwOrConsole('Undeclared event ID for ' + getObjectClassname(this) + ': ', eventId);
+        return false;
+    }
+
+    switch (arguments.length) {
+    case 1: return listenerList.emit0();
+    case 2: return listenerList.emit1(p1);
+    case 3: return listenerList.emit2(p1, p2);
+    case 4: return listenerList.emit3(p1, p2, p3);
+    default: return listenerList.emitN.apply(listenerList, [].slice.call(arguments, 1));
+    }
+};
+
+/**
+ * Returns a "quick emitter" for a given event ID of this EventEmitter.
+ * Using a quick emitter to emit is quite faster (if you are chasing fractions of milliseconds).
+ *
+ * @param {string} eventId - declared event ID for which you want to "quick emit"
+ * @returns {QuickEmitter} - an object with methods emit0, emit1, emit2, emit3 and emitN
+ */
+EventEmitter.prototype.getQuickEmitter = function (eventId) {
+    var listenerList = this._listenersPerEventId[eventId];
+    if (listenerList === undefined) {
+        return throwOrConsole('Undeclared event ID for ' + getObjectClassname(this) + ': ', eventId);
+    }
+    return listenerList;
+};
+
+/**
+ * Tells how many listeners are currently subscribed to given event ID.
+ *
+ * @param {string} eventId
+ * @returns {number} number of listeners on this specific event
+ */
+EventEmitter.prototype.listenerCount = function listenerCount (eventId) {
+    var listenerList = this._listenersPerEventId[eventId];
+    if (listenerList === undefined) {
+        return throwOrConsole('Undeclared event ID for ' + getObjectClassname(this) + ': ', eventId);
+    }
+    return listenerList._count;
+};
+
+
+//--- Listener side
+
+/**
+ * Subscribes to an event.
+ *
+ * @param {string} eventId
+ * @param {function} method - can be a simple function too
+ * @param {object|string|undefined} listener - if not passed, emitter will be passed as context when event occurs
+ * @returns {EventEmitter} this
+ */
+EventEmitter.prototype.on = function (eventId, method, listener) {
+    var listenerList = this._listenersPerEventId[eventId];
+    if (!listenerList) return throwOrConsole('Invalid event ID: ', getAsText(this, eventId, listener)), this;
+
+    if (debugLevel > 0) {
+        if (typeof method !== 'function' || typeof listener === 'function') {
+            return throwOrConsole('Invalid parameters to emitter.on: \'', eventId + '\', ' + typeof method + ', ' + getObjectClassname(listener)), this;
+        }
+        listenerList._countListener(listener || this, listener);
+    }
+    listenerList._addListener(listener || this, method);
+    return this;
+};
+EventEmitter.prototype.addListener = EventEmitter.prototype.on;
+
+/**
+ * Unsubscribes from an event.
+ * Specifying your listeners when calling "on" is often much easier
+ * than having to track/store which functions you passed when subscribing.
+ *
+ * @param {string} eventId
+ * @param {object|string|function} listener - same "listener" you passed when you called "on"
+ */
+EventEmitter.prototype.off = function (eventId, listener) {
+    var listenerList = this._listenersPerEventId[eventId];
+    if (!listenerList) return throwOrConsole('Invalid event ID: ', getAsText(this, eventId, listener));
+
+    if (typeof listener === 'function') {
+        // Old API compatibility
+        var indexFn = listenerList._findMethod(listener);
+        if (indexFn !== -1) listenerList._removeListener(indexFn, null);
+    } else {
+        var index = listenerList._findListener(listener);
+        if (index !== -1) {
+            listenerList._removeListener(index, listener);
+        } else if (debugLevel > 0 && !listener) {
+            return throwOrConsole('Invalid parameter to emitter.off: \'', eventId + '\', ' + listener);
+        }
+    }
+};
+EventEmitter.prototype.removeListener = EventEmitter.prototype.off;
+
+/**
+ * Unsubscribes the given listener (context) from all events of this emitter
+ *
+ * @param {object|string} listener
+ */
+EventEmitter.prototype.forgetListener = function (listener) {
+    for (var eventId in this._listenersPerEventId) {
+        this.off(eventId, listener);
+    }
+};
+
+/**
+ * Sets the limit listener count for this emitter and listener class objects.
+ * Default is 1 for all classes when this API is not called.
+ *
+ * @param {number} maxCount
+ * @param {object|string} listener
+ */
+EventEmitter.prototype.setListenerMaxCount = function (maxCount, listener) {
+    if (debugLevel === 0) return;
+    if (!(maxCount > 0) || !listener) {
+        return throwOrConsole('Invalid parameters to emitter.setListenerMaxCount: ', maxCount + ', ' + listener);
+    }
+    this._maxCountPerListenerKey[getObjectClassname(listener)] = maxCount;
+};
+
+// Old API compatibility
+EventEmitter.prototype.setMaxListeners = function (maxCount) {
+    if (debugLevel === 0) return;
+    if (!(maxCount > 0) || arguments.length > 1) {
+        return throwOrConsole('Invalid parameters to emitter.setMaxListeners: ', maxCount + (arguments[1] !== undefined ? ', ' + arguments[1] : ''));
+    }
+    this._maxCountPerListenerKey[DEFAULT_LISTENER] = maxCount;
+};
+
+
+//--- Private helpers
+
+/**
+ * Internal implementation of a "single eventID" emitter to a list of listeners.
+ * A ListenerList can be returned to outside world for "quick emit" purpose.
+ *
+ * @param {EventEmitter} emitter
+ * @param {string} eventId
+ */
+function ListenerList (emitter, eventId) {
+    this._count = 0; // count of "listeners"
+    this._methods = null; // null, function, or array of functions
+    this._objects = null; // null, context, or array of contexts
+
+    if (debugLevel > 0) {
+        this._emitter = emitter; // our parent EventEmitter
+        this._eventId = eventId;
+        this._isEmitting = false;
+        this._counterMap = {}; // key: listenerKey, value: count of listeners with same listenerKey
+    }
+}
+
+ListenerList.prototype._addListener = function (context, method) {
+    if (typeof this._methods === 'function') {
+        // 1 -> 2 # Array creation
+        this._count = 2;
+        this._methods = [this._methods, method];
+        this._objects = [this._objects, context];
+    } else if (this._count === 0) {
+        // 0 -> 1
+        this._count = 1;
+        this._methods = method;
+        this._objects = context;
+    } else {
+        // n -> n+1 (n >= 0) # Array already exists
+        this._methods[this._count] = method;
+        this._objects[this._count++] = context;
+    }
+};
+
+ListenerList.prototype._findListener = function (listener) {
+    if (typeof this._methods === 'function') {
+        return this._objects === listener ? 0 : -1;
+    } else {
+        return this._objects !== null ? this._objects.indexOf(listener) : -1;
+    }
+};
+
+ListenerList.prototype._findMethod = function (method) {
+    if (typeof this._methods === 'function') {
+        return this._methods === method ? 0 : -1;
+    } else {
+        return this._methods !== null ? this._methods.indexOf(method) : -1;
+    }
+};
+
+ListenerList.prototype._removeListener = function (index, listener) {
+    this._count--;
+    if (typeof this._methods === 'function') {
+        this._methods = null;
+        this._objects = null;
+    } else {
+        for (var i = index; i < this._count; i++) {
+            this._methods[i] = this._methods[i + 1];
+            this._objects[i] = this._objects[i + 1];
+        }
+        this._methods[i] = null;
+        this._objects[i] = null;
+    }
+
+    if (debugLevel > 0) {
+        var listenerKey = getObjectClassname(listener);
+        this._counterMap[listenerKey]--;
+        if (this._isEmitting) throwOrConsole('Removed listener during emit: ', getAsText(this._emitter, this._eventId, listener));
+    }
+};
+
+// Only used if debugLevel > 0
+ListenerList.prototype._countListener = function (context, listener) {
+    var listenerKey = getObjectClassname(listener);
+    var currentCount = (this._counterMap[listenerKey] || 0) + 1;
+    var maxListenerCount = this._emitter._maxCountPerListenerKey[listenerKey] || 1;
+    if (currentCount > maxListenerCount) {
+        var msg = 'Too many listeners: ' + getAsText(this._emitter, this._eventId, listener) + '. ';
+        var advice = listener
+            ? 'Use ' + getObjectClassname(this._emitter) + '.setListenerMaxCount(n, ' + listenerKey + ') with n >= ' + currentCount
+            : 'Use ' + getObjectClassname(this._emitter) + '.setMaxListeners(n) with n >= ' + currentCount + '. Even better: specify your listeners when calling "on"';
+        throwOrConsole(msg, advice); // if console we can continue below
+    }
+    this._counterMap[listenerKey] = currentCount; // not done if exception above
+    // Same listener should not listen twice to same event ID (does not apply to "undefined" listener)
+    // NB: this._count is not yet updated at this point, hence this._count >= 1 below (instead of 2)
+    if (currentCount >= 2 && this._count >= 1 && context === listener && this._findListener(listener) !== -1) {
+        throwOrConsole('Listener listens twice: ', getAsText(this._emitter, this._eventId, listener));
+    }
+};
+
+ListenerList.prototype.emit0 = function () {
+    if (this._count === 0) return false; // 0 listeners
+    if (debugLevel > 0) this._isEmitting = true;
+
+    if (typeof this._methods === 'function') {
+        this._methods.call(this._objects);
+    } else {
+        for (var i = 0; i < this._count; i++) { this._methods[i].call(this._objects[i]); }
+    }
+
+    if (debugLevel > 0) this._isEmitting = false;
+    return true;
+};
+
+ListenerList.prototype.emit1 = function (arg1) {
+    if (this._count === 0) return false; // 0 listeners
+    if (debugLevel > 0) this._isEmitting = true;
+
+    if (typeof this._methods === 'function') {
+        this._methods.call(this._objects, arg1);
+    } else {
+        for (var i = 0; i < this._count; i++) { this._methods[i].call(this._objects[i], arg1); }
+    }
+
+    if (debugLevel > 0) this._isEmitting = false;
+    return true;
+};
+
+ListenerList.prototype.emit2 = function (arg1, arg2) {
+    if (this._count === 0) return false; // 0 listeners
+    if (debugLevel > 0) this._isEmitting = true;
+
+    if (typeof this._methods === 'function') {
+        this._methods.call(this._objects, arg1, arg2);
+    } else {
+        for (var i = 0; i < this._count; i++) { this._methods[i].call(this._objects[i], arg1, arg2); }
+    }
+
+    if (debugLevel > 0) this._isEmitting = false;
+    return true;
+};
+
+ListenerList.prototype.emit3 = function (arg1, arg2, arg3) {
+    if (this._count === 0) return false; // 0 listeners
+    if (debugLevel > 0) this._isEmitting = true;
+
+    if (typeof this._methods === 'function') {
+        this._methods.call(this._objects, arg1, arg2, arg3);
+    } else {
+        for (var i = 0; i < this._count; i++) { this._methods[i].call(this._objects[i], arg1, arg2, arg3); }
+    }
+
+    if (debugLevel > 0) this._isEmitting = false;
+    return true;
+};
+
+ListenerList.prototype.emitN = function () {
+    if (this._count === 0) return false; // 0 listeners
+    if (debugLevel > 0) this._isEmitting = true;
+
+    if (typeof this._methods === 'function') {
+        this._methods.apply(this._objects, arguments);
+    } else {
+        for (var i = 0; i < this._count; i++) { this._methods[i].apply(this._objects[i], arguments); }
+    }
+
+    if (debugLevel > 0) this._isEmitting = false;
+    return true;
+};
+
+//---
+
+/* eslint no-console: 0 */
+
+function throwOrConsole (msg, info) {
+    if (debugLevel >= EventEmitter.DEBUG_THROW) throw new Error(msg + info);
+    console.error(msg + info);
+}
+
+var DEFAULT_LISTENER = '<default>';
+
+function getObjectClassname (listener) {
+    if (!listener) return DEFAULT_LISTENER;
+    if (typeof listener === 'string') return listener;
+    var constr = listener.constructor;
+    return constr.name || constr.toString().split(/ |\(/, 2)[1];
+}
+
+function getAsText (emitter, eventId, listener) {
+    if (listener === undefined || typeof listener === 'function') {
+        return getObjectClassname(emitter) + '.on(\'' + eventId + '\', fn)';
+    } else {
+        return getObjectClassname(emitter) + '.on(\'' + eventId + '\', fn, ' + getObjectClassname(listener) + ')';
+    }
+}
+
+},{}],10:[function(require,module,exports){
 var EventEmitter = require('../index.js');
 var inherits = require('util').inherits;
 
@@ -1965,6 +2544,26 @@ AnotherListener.prototype.checkReceivedCount = function (expected) {
     }
 };
 
+//--- Multipurpose test listener
+
+function Ear (id) {
+    this.id = id;
+    this.count = 0;
+}
+
+var hearingRecord = '';
+
+Ear.prototype.onSignal1 = function () {
+    this.count++;
+    hearingRecord += '#' + this.id;
+};
+
+function checkHearing (expected) {
+    checkResult(expected, hearingRecord);
+    hearingRecord = '';
+}
+
+//---
 
 function basicTest () {
     EventEmitter.setDebugLevel(EventEmitter.DEBUG_THROW);
@@ -2036,12 +2635,18 @@ function slowEmitErrorTest () {
     checkConsole('Invalid event ID: MySignaler.on(\'signalXXX\', fn, Abc)');
     signaler.on('signalXXX', function () {}, 123); // number is not really a correct context but...
     checkConsole('Invalid event ID: MySignaler.on(\'signalXXX\', fn, Number)');
+    signaler.on('signal1', undefined);
+    checkConsole('Invalid function parameter to emitter.on \'signal1\': undefined');
+    signaler.on('signal1', signaler, function () {});
+    checkConsole('Invalid listener parameter to emitter.on \'signal1\': function');
+    signaler.on('signal1', function () {}, undefined);
+    checkConsole('Invalid listener parameter to emitter.on \'signal1\': undefined');
 
     EventEmitter.setDebugLevel(EventEmitter.DEBUG_THROW);
-    checkException('Invalid parameters to emitter.on: \'signal1\', undefined, <default>', function () {
+    checkException('Invalid function parameter to emitter.on \'signal1\': undefined', function () {
         signaler.on('signal1', undefined);
     });
-    checkException('Invalid parameters to emitter.on: \'signal1\', object, Function', function () {
+    checkException('Invalid listener parameter to emitter.on \'signal1\': function', function () {
         signaler.on('signal1', signaler, function () {});
     });
 
@@ -2064,7 +2669,6 @@ function slowEmitErrorTest () {
 }
 
 function slowEmitTest () {
-    EventEmitter.setDebugLevel(EventEmitter.DEBUG_THROW);
     var signaler = new MySignaler();
 
     checkResult(0, signaler.listenerCount('signal1'));
@@ -2295,8 +2899,8 @@ function setListenerMaxCountTest() {
     checkException('Invalid parameters to emitter.setListenerMaxCount: 10, undefined', function () {
         signaler.setListenerMaxCount(10);
     });
-    function Ear() {}
-    var ear1 = new Ear(), ear2 = new Ear(), ear3 = new Ear();
+
+    var ear1 = new Ear(1), ear2 = new Ear(2), ear3 = new Ear(3);
     signaler.setListenerMaxCount(2, ear1); // any Ear object is equivalent here
     signaler.on('signal1', function () {}, ear1);
     signaler.on('signal2', function () {}, ear1);
@@ -2331,59 +2935,111 @@ function nodebugTest () {
 }
 
 /**
- * This test is here to see how we break when removing listeners during an emit on same event ID.
- * See longer comments elsewhere about why this is not supported.
+ * What happens when adding/removing listeners during an emit on same event ID.
  */
-function offDuringEmitTest () {
+function addRemoveDuringEmitTest () {
     EventEmitter.setDebugLevel(EventEmitter.DEBUG_THROW);
     var signaler = new MySignaler();
-    function Ear () { this.count = 0; }
-    var ear1 = new Ear(), ear2 = new Ear(), ear3 = new Ear();
+
+    var ear1 = new Ear(1), ear2 = new Ear(2), ear3 = new Ear(3), ear4 = new Ear(4);
+
     ear1.onSignal1 = function () {
         signaler.forgetListener(this);
+        signaler.on('signal1', Ear.prototype.onSignal1, ear3);
+        signaler.off('signal1', ear4);
     };
-    ear2.onSignal1 = function () {
-        this.count++;
-    };
-    ear3.onSignal1 = ear2.onSignal1;
+
     signaler.setListenerMaxCount(3, ear1);
 
     signaler.on('signal1', ear1.onSignal1, ear1);
     signaler.on('signal1', ear2.onSignal1, ear2);
-
-    checkException('Removed listener during emit: MySignaler.on(\'signal1\', fn, Ear)', function () {
-        signaler.emit('signal1');
-    });
-    // ear2 has NOT been notified because of exception during emit
-    checkResult(0, ear2.count);
-    // ear1 has been removed; ear2 is still listening
-    checkResult(1, signaler.listenerCount('signal1'));
-    checkResult(true, signaler.emit('signal1'));
-    checkResult(1, ear2.count);
-    signaler.off('signal1', ear2);
-    checkResult(0, signaler.listenerCount('signal1'));
-
-    // Try again but use no-throw mode now...
-
-    EventEmitter.setDebugLevel(EventEmitter.DEBUG_ERROR);
-    ear2.count = ear3.count = 0;
-    signaler.on('signal1', ear1.onSignal1, ear1);
-    signaler.on('signal1', ear2.onSignal1, ear2);
-    signaler.on('signal1', ear3.onSignal1, ear3);
+    signaler.on('signal1', ear2.onSignal1, ear4);
 
     signaler.emit('signal1');
-    checkConsole('Removed listener during emit: MySignaler.on(\'signal1\', fn, Ear)');
-
-    // ear2 has NOT been notified because it was just after ear1 when ear1 got removed (not handled)
-    checkResult(0, ear2.count);
-    // ear3 HAS been notified
-    checkResult(1, ear3.count);
-    // ear1 has been removed; ear2 & ear3 are still listening
+    // ear1 has been removed; ear2 is still listening; ear3 started listening; ear4 is gone
+    // NB: depending on `respectSubscriberOrder` ear3 might be before (default) or after ear2 in listener list
+    // This test does not care about this: see listenerOrderTest about that.
     checkResult(2, signaler.listenerCount('signal1'));
-    ear2.count = ear3.count = 0;
-    checkResult(true, signaler.emit('signal1'));
+
+    // ear2 has been notified
     checkResult(1, ear2.count);
-    checkResult(1, ear3.count);
+    // ear4 did not receive it because removed during emit on ear1; this behavior is a specification
+    checkResult(0, ear4.count);
+
+    var ear3count = ear3.count; // could be 0 or 1 since ear3 started listening during an "emit"
+
+    // emit again and verify ear2 and ear3 are listening
+    checkResult(true, signaler.emit('signal1'));
+    checkResult(2, ear2.count);
+    checkResult(ear3count + 1, ear3.count); // could be 1 or 2
+}
+
+function listenerOrderTest () {
+    EventEmitter.setDebugLevel(EventEmitter.DEBUG_THROW);
+    var signaler = new MySignaler();
+
+    signaler.setListenerMaxCount(10, new Ear());
+    var ears = [];
+    for (var i = 0; i < 10; i++) {
+        ears.push(new Ear(i));
+        signaler.on('signal1', Ear.prototype.onSignal1, ears[i]);
+    }
+    hearingRecord = ''; // clear previous tests
+    signaler.emit('signal1');
+    checkHearing('#0#1#2#3#4#5#6#7#8#9');
+
+    EventEmitter.respectSubscriberOrder(true);
+
+    signaler.forgetListener(ears[9]);
+    signaler.forgetListener(ears[8]);
+    signaler.forgetListener(ears[2]);
+    signaler.emit('signal1');
+    checkHearing('#0#1#3#4#5#6#7');
+
+    signaler.on('signal1', Ear.prototype.onSignal1, ears[2]);
+    signaler.on('signal1', Ear.prototype.onSignal1, ears[8]);
+    signaler.on('signal1', Ear.prototype.onSignal1, ears[9]);
+    signaler.emit('signal1');
+    checkHearing('#0#1#3#4#5#6#7#2#8#9');
+
+    EventEmitter.respectSubscriberOrder(false);
+
+    signaler.forgetListener(ears[7]);
+    signaler.on('signal1', Ear.prototype.onSignal1, ears[7]);
+    signaler.emit('signal1');
+    checkHearing('#0#1#7#3#4#5#6#2#8#9'); // Ear 7 took back the empty slot
+}
+
+function compactListTest () {
+    EventEmitter.setDebugLevel(EventEmitter.DEBUG_THROW);
+    var signaler = new MySignaler();
+
+    signaler.setListenerMaxCount(6, new Ear());
+    var ears = [];
+    for (var i = 0; i < 6; i++) {
+        ears.push(new Ear(i));
+        signaler.on('signal1', Ear.prototype.onSignal1, ears[i]);
+    }
+    signaler.emit('signal1');
+    checkHearing('#0#1#2#3#4#5');
+
+    EventEmitter.respectSubscriberOrder(true);
+
+    for (i = 0; i <= 4; i++) {
+        signaler.forgetListener(ears[i]);
+        signaler.on('signal1', Ear.prototype.onSignal1, ears[i]);
+    }
+    signaler.emit('signal1');
+    checkHearing('#5#0#1#2#3#4');
+    signaler.forgetListener(ears[0]);
+    signaler.on('signal1', Ear.prototype.onSignal1, ears[0]);
+    signaler.emit('signal1');
+    checkHearing('#5#1#2#3#4#0');
+    // "White box" test below to make sure we compacted the list of listeners
+    // This is really implementation and settings dependent but I prefer checking it here
+    checkResult(6, signaler._listenersPerEventId['signal1']._methods.length);
+
+    EventEmitter.respectSubscriberOrder(false);
 }
 
 
@@ -2435,23 +3091,21 @@ function runTest () {
     rerouteConsole();
 
     basicTest();
-
     slowEmitErrorTest();
-    EventEmitter.setDebugLevel(EventEmitter.DEBUG_THROW);
-    slowEmitTest();
-    EventEmitter.setDebugLevel(EventEmitter.NO_DEBUG);
-    slowEmitTest();
-
     quickEmitErrorTest();
-    EventEmitter.setDebugLevel(EventEmitter.DEBUG_THROW);
-    quickEmitTest();
-    EventEmitter.setDebugLevel(EventEmitter.NO_DEBUG);
-    quickEmitTest();
-
     oldApiTest();
     setListenerMaxCountTest();
     nodebugTest();
-    offDuringEmitTest();
+    addRemoveDuringEmitTest();
+    listenerOrderTest();
+    compactListTest();
+
+    EventEmitter.setDebugLevel(EventEmitter.DEBUG_THROW);
+    slowEmitTest();
+    quickEmitTest();
+    EventEmitter.setDebugLevel(EventEmitter.NO_DEBUG);
+    slowEmitTest();
+    quickEmitTest();
 
     checkConsole(undefined); // catch any missed console error here
 
