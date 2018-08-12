@@ -36,6 +36,12 @@ EventEmitter.setDebugLevel = function (level) {
     debugLevel = level;
 };
 
+var respectSubscriberOrder = false;
+
+EventEmitter.respectSubscriberOrder = function (shouldRespect) {
+    respectSubscriberOrder = shouldRespect;
+};
+
 
 //--- Emitter side
 
@@ -114,10 +120,13 @@ EventEmitter.prototype.on = function (eventId, method, listener) {
     if (!listenerList) return throwOrConsole('Invalid event ID: ', getAsText(this, eventId, listener)), this;
 
     if (debugLevel > 0) {
-        if (typeof method !== 'function' || typeof listener === 'function') {
-            return throwOrConsole('Invalid parameters to emitter.on: \'', eventId + '\', ' + typeof method + ', ' + getObjectClassname(listener)), this;
+        if (arguments.length >= 3 && (!listener || typeof listener === 'function')) {
+            return throwOrConsole('Invalid listener parameter to emitter.on \'' + eventId + '\': ', typeof listener), this;
         }
-        listenerList._countListener(listener || this, listener);
+        if (typeof method !== 'function') {
+            return throwOrConsole('Invalid function parameter to emitter.on \'' + eventId + '\': ', typeof method), this;
+        }
+        listenerList._countListener(listener || this, listener || null);
     }
     listenerList._addListener(listener || this, method);
     return this;
@@ -204,27 +213,50 @@ function ListenerList (emitter, eventId) {
     if (debugLevel > 0) {
         this._emitter = emitter; // our parent EventEmitter
         this._eventId = eventId;
-        this._isEmitting = false;
-        this._counterMap = {}; // key: listenerKey, value: count of listeners with same listenerKey
+        this._counterMap = null; // key: listenerKey, value: count of listeners with same listenerKey
     }
 }
 
 ListenerList.prototype._addListener = function (context, method) {
-    if (typeof this._methods === 'function') {
-        // 1 -> 2 # Array creation
-        this._count = 2;
-        this._methods = [this._methods, method];
-        this._objects = [this._objects, context];
-    } else if (this._count === 0) {
+    if (this._methods === null) {
         // 0 -> 1
         this._count = 1;
         this._methods = method;
         this._objects = context;
-    } else {
+    } else if (typeof this._methods !== 'function') {
         // n -> n+1 (n >= 0) # Array already exists
-        this._methods[this._count] = method;
-        this._objects[this._count++] = context;
+        var index = this._methods.length;
+        if (index !== this._count) {
+            if (index > 5 && index > this._count * 2) {
+                this._compactList(this._count + 1);
+                index = this._count;
+            } else if (respectSubscriberOrder) {
+                while (index >= 1 && !this._methods[index - 1]) index--;
+            } else {
+                for (index = 0; this._methods[index]; index++) ; // this._methods.indexOf(null) seems slower
+            }
+        }
+        this._methods[index] = method;
+        this._objects[index] = context;
+        this._count++;
+    } else {
+        // 1 -> 2 # Array creation
+        this._count = 2;
+        this._methods = [this._methods, method];
+        this._objects = [this._objects, context];
     }
+};
+
+ListenerList.prototype._compactList = function (size) {
+    var methods = new Array(size), objects = new Array(size);
+    for (var i = 0, j = 0; j < this._count; i++) {
+        if (this._methods[i]) {
+            methods[j] = this._methods[i];
+            objects[j++] = this._objects[i];
+        }
+    }
+    this._methods = methods;
+    this._objects = objects;
 };
 
 ListenerList.prototype._findListener = function (listener) {
@@ -249,25 +281,28 @@ ListenerList.prototype._removeListener = function (index, listener) {
         this._methods = null;
         this._objects = null;
     } else {
-        for (var i = index; i < this._count; i++) {
-            this._methods[i] = this._methods[i + 1];
-            this._objects[i] = this._objects[i + 1];
-        }
-        this._methods[i] = null;
-        this._objects[i] = null;
+        this._methods[index] = null;
+        this._objects[index] = null;
     }
 
     if (debugLevel > 0) {
         var listenerKey = getObjectClassname(listener);
         this._counterMap[listenerKey]--;
-        if (this._isEmitting) throwOrConsole('Removed listener during emit: ', getAsText(this._emitter, this._eventId, listener));
     }
 };
 
 // Only used if debugLevel > 0
 ListenerList.prototype._countListener = function (context, listener) {
     var listenerKey = getObjectClassname(listener);
-    var currentCount = (this._counterMap[listenerKey] || 0) + 1;
+
+    var currentCount;
+    if (!this._counterMap) {
+        this._counterMap = { 0: 0 };
+        currentCount = 1;
+    } else {
+        currentCount = (this._counterMap[listenerKey] || 0) + 1
+    }
+
     var maxListenerCount = this._emitter._maxCountPerListenerKey[listenerKey] || 1;
     if (currentCount > maxListenerCount) {
         var msg = 'Too many listeners: ' + getAsText(this._emitter, this._eventId, listener) + '. ';
@@ -286,71 +321,66 @@ ListenerList.prototype._countListener = function (context, listener) {
 
 ListenerList.prototype.emit0 = function () {
     if (this._count === 0) return false; // 0 listeners
-    if (debugLevel > 0) this._isEmitting = true;
 
     if (typeof this._methods === 'function') {
         this._methods.call(this._objects);
     } else {
-        for (var i = 0; i < this._count; i++) { this._methods[i].call(this._objects[i]); }
+        var methods = this._methods, objects = this._objects, len = this._methods.length;
+        for (var i = 0; i < len; i++) { var m = methods[i]; m && m.call(objects[i]); }
     }
 
-    if (debugLevel > 0) this._isEmitting = false;
     return true;
 };
 
 ListenerList.prototype.emit1 = function (arg1) {
     if (this._count === 0) return false; // 0 listeners
-    if (debugLevel > 0) this._isEmitting = true;
 
     if (typeof this._methods === 'function') {
         this._methods.call(this._objects, arg1);
     } else {
-        for (var i = 0; i < this._count; i++) { this._methods[i].call(this._objects[i], arg1); }
+        var methods = this._methods, objects = this._objects, len = this._methods.length;
+        for (var i = 0; i < len; i++) { var m = methods[i]; m && m.call(objects[i], arg1); }
     }
 
-    if (debugLevel > 0) this._isEmitting = false;
     return true;
 };
 
 ListenerList.prototype.emit2 = function (arg1, arg2) {
     if (this._count === 0) return false; // 0 listeners
-    if (debugLevel > 0) this._isEmitting = true;
 
     if (typeof this._methods === 'function') {
         this._methods.call(this._objects, arg1, arg2);
     } else {
-        for (var i = 0; i < this._count; i++) { this._methods[i].call(this._objects[i], arg1, arg2); }
+        var methods = this._methods, objects = this._objects, len = this._methods.length;
+        for (var i = 0; i < len; i++) { var m = methods[i]; m && m.call(objects[i], arg1, arg2); }
     }
 
-    if (debugLevel > 0) this._isEmitting = false;
     return true;
 };
 
 ListenerList.prototype.emit3 = function (arg1, arg2, arg3) {
     if (this._count === 0) return false; // 0 listeners
-    if (debugLevel > 0) this._isEmitting = true;
 
     if (typeof this._methods === 'function') {
         this._methods.call(this._objects, arg1, arg2, arg3);
     } else {
-        for (var i = 0; i < this._count; i++) { this._methods[i].call(this._objects[i], arg1, arg2, arg3); }
+        var methods = this._methods, objects = this._objects, len = this._methods.length;
+        for (var i = 0; i < len; i++) { var m = methods[i]; m && m.call(objects[i], arg1, arg2, arg3); }
     }
 
-    if (debugLevel > 0) this._isEmitting = false;
     return true;
 };
 
 ListenerList.prototype.emitN = function () {
     if (this._count === 0) return false; // 0 listeners
-    if (debugLevel > 0) this._isEmitting = true;
 
     if (typeof this._methods === 'function') {
         this._methods.apply(this._objects, arguments);
     } else {
-        for (var i = 0; i < this._count; i++) { this._methods[i].apply(this._objects[i], arguments); }
+        var methods = this._methods, objects = this._objects, len = this._methods.length;
+        for (var i = 0; i < len; i++) { var m = methods[i]; m && m.apply(objects[i], arguments); }
     }
 
-    if (debugLevel > 0) this._isEmitting = false;
     return true;
 };
 
@@ -363,7 +393,7 @@ function throwOrConsole (msg, info) {
     console.error(msg + info);
 }
 
-var DEFAULT_LISTENER = '<default>';
+var DEFAULT_LISTENER = 0; // Using 0 is a bit faster for old API when in debug mode
 
 function getObjectClassname (listener) {
     if (!listener) return DEFAULT_LISTENER;
@@ -373,7 +403,7 @@ function getObjectClassname (listener) {
 }
 
 function getAsText (emitter, eventId, listener) {
-    if (listener === undefined || typeof listener === 'function') {
+    if (!listener || typeof listener === 'function') {
         return getObjectClassname(emitter) + '.on(\'' + eventId + '\', fn)';
     } else {
         return getObjectClassname(emitter) + '.on(\'' + eventId + '\', fn, ' + getObjectClassname(listener) + ')';
