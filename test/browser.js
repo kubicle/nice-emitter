@@ -12,7 +12,7 @@ function createDom() {
 
     createDiv(document.body, 'title', 'nice-emitter Benchmark');
     createDiv(document.body, 'infos', 'EE3 = EventEmitter3');
-    createDiv(document.body, 'infos', 'NE = nice-emitter');
+    createDiv(document.body, 'infos', 'NE = nice-emitter (Quick = using a quick emitter)');
     createDiv(document.body, 'infos', 'Each test runs 3 times.');
 
     logDiv = createDiv(document.body, 'logDiv');
