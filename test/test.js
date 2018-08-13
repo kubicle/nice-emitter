@@ -199,7 +199,7 @@ function slowEmitErrorTest () {
     signaler.off('signalXXX', 'A');
     checkConsole('Invalid event ID: MySignaler.on(\'signalXXX\', fn, A)');
     signaler.off('signal1');
-    checkConsole('Invalid parameter to emitter.off: \'signal1\', undefined');
+    checkConsole('Invalid parameter to emitter.off \'signal1\': undefined');
 
     EventEmitter.setDebugLevel(EventEmitter.DEBUG_THROW);
     signaler.setListenerMaxCount(2, 'A');

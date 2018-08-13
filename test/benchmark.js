@@ -84,6 +84,8 @@ addTestNice('NE', function addRemoveThird () {
     ne.on('foo', baz2);
 });
 
+// If emitter must respect subscribers order AND it uses an array (with "holes")
+// then this test makes the array grow until a reorg (compact) operation is done.
 addTestStandard(function addRemoveCrossed () {
     ee.on('foo', baz);
     ee.removeListener('foo', bar);

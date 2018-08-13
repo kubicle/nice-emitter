@@ -154,7 +154,7 @@ EventEmitter.prototype.off = function (eventId, listener) {
         if (index !== -1) {
             listenerList._removeListener(index, listener);
         } else if (debugLevel > 0 && !listener) {
-            return throwOrConsole('Invalid parameter to emitter.off: \'', eventId + '\', ' + listener);
+            return throwOrConsole('Invalid parameter to emitter.off \'' + eventId + '\': ', listener);
         }
     }
 };
