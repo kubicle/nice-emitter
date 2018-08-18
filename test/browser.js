@@ -66,11 +66,24 @@ function logLine (result) {
 }
 
 function log () {
-    var msg = [].join.call(arguments, ' ');
+    var msg = Array.prototype.join.call(arguments, ' ');
     browserConsoleLog(msg);
     var div = createDiv(logDiv, 'logLine', msg);
     scrollToBottom();
     return div;
+}
+
+function logError (e) {
+    var stack = (e && e.stack) || '' + e;
+    var stackLines = stack.split(/\n|\r\n/);
+
+    console.error(stack);
+
+    for (var i = 0; i <= 2; i++) {
+        var className = i === 0 ? 'logLine error' : 'logLine';
+        createDiv(logDiv, className, stackLines[i]);
+    }
+    scrollToBottom();
 }
 
 function scrollToBottom () {
@@ -92,30 +105,30 @@ var subStep = 0;
 
 function runOneStep () {
     if (subStep === 0) logSection(stepNames[step]);
-    var result;
+    var result = null;
 
-    switch (step) {
-    case 0:
-        result = runBenchmark(subStep++, /*isProd=*/false);
-        if (result !== null) {
-            logLine(result);
-        } else {
-            step++;
-            subStep = 0;
+    try {
+        switch (step) {
+        case 0:
+            result = runBenchmark(subStep++, /*isProd=*/false);
+            break;
+        case 1:
+            result = runBenchmark(subStep++, /*isProd=*/true);
+            break;
+        case 2:
+            runTest(function done () {});
+            return; // nothing else to schedule
         }
-        break;
-    case 1:
-        result = runBenchmark(subStep++, /*isProd=*/true);
-        if (result !== null) {
-            logLine(result);
-        } else {
-            step++;
-            subStep = 0;
-        }
-        break;
-    case 2:
-        runTest();
-        return; // stop here
+    } catch (e) {
+        logError(e);
+        return; // abort tests
+    }
+
+    if (result !== null) {
+        logLine(result);
+    } else {
+        step++;
+        subStep = 0;
     }
     setTimeout(runOneStep, 50);
 }

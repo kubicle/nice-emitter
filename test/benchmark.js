@@ -6,6 +6,7 @@
  * for example the "context" object associated to each listener.
  */
 
+ 'use strict';
 var EventEmitter = require('../index.js');
 var EventEmitter3 = require('eventemitter3');
 var NiceEmitter03 = require('nice-emitter');

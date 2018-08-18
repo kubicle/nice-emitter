@@ -149,17 +149,80 @@ EventEmitter.prototype.off = function (eventId, listener) {
     if (typeof listener === 'function') {
         // Old API compatibility
         var indexFn = listenerList._findMethod(listener);
-        if (indexFn !== -1) listenerList._removeListener(indexFn, null);
+        if (indexFn !== -1) {
+            listenerList._removeListener(indexFn, null);
+        } else if (listener._hasNiceEmitterOnce) {
+            this._removeOnceListener(listenerList, listener);
+        }
     } else {
         var index = listenerList._findListener(listener);
         if (index !== -1) {
             listenerList._removeListener(index, listener);
         } else if (debugLevel > 0 && !listener) {
-            return throwOrConsole('Invalid parameter to emitter.off: \'', eventId + '\', ' + listener);
+            return throwOrConsole('Invalid parameter to emitter.off \'' + eventId + '\': ', listener);
         }
     }
 };
 EventEmitter.prototype.removeListener = EventEmitter.prototype.off;
+
+/**
+ * Old API compatibility
+ * @deprecated `once` is not your friend.
+ * @param {string} eventId
+ * @param {function} method - can be a simple function too
+ * @param {object|string|undefined} listener - if not passed, emitter will be passed as context when event occurs
+ * @param {number} [timeoutMs] - if not passed, a "human-debugging" value of 5 seconds will be used
+ */
+EventEmitter.prototype.once = function (eventId, method, listener, timeoutMs) {
+    method._hasNiceEmitterOnce = true;
+
+    timeoutMs = timeoutMs || 5000;
+    var timeout = setTimeout(function () {
+        console.error('emitter.once \'' + eventId + '\' was not called before ' + timeoutMs + 'ms timeout');
+    }, timeoutMs);
+
+    var emitter = this;
+    function hopFunc () {
+        if (listener) {
+            emitter.off(eventId, listener);
+        } else {
+            emitter.off(eventId, hopFunc);
+        }
+        clearTimeout(timeout);
+
+        method.apply(this, arguments); // "this" and arguments will be passed correctly by emitter
+    }
+    hopFunc._timeout = timeout;
+    hopFunc._method = method;
+
+    if (listener) {
+        this.on(eventId, hopFunc, listener);
+    } else {
+        this.on(eventId, hopFunc);
+    }
+};
+
+// Only used when caller does `emitter.off(eventId, func)` of a previously `emitter.once(eventId, func)`
+EventEmitter.prototype._removeOnceListener = function (listenerList, method) {
+    var hopFunc, indexFn = -1;
+    var methods = listenerList._methods;
+    if (methods === null) return; // not listening; safe to ignore
+    if (typeof methods === 'function') {
+        if (methods._method === method) hopFunc = methods; // indexFn not needed here
+    } else {
+        for (var i = 0; i < methods.length; i++) {
+            var m = methods[i];
+            if (m && m._method === method) {
+                hopFunc = m;
+                indexFn = i;
+                break;
+            }
+        }
+    }
+    if (!hopFunc) return; // happens if "once" has already fired before being removed; safe to ignore
+    listenerList._removeListener(indexFn, null);
+    clearTimeout(hopFunc._timeout);
+}
 
 /**
  * Unsubscribes the given listener (context) from all events of this emitter
@@ -1229,6 +1292,7 @@ function hasOwnProperty(obj, prop) {
  * for example the "context" object associated to each listener.
  */
 
+ 'use strict';
 var EventEmitter = require('../index.js');
 var EventEmitter3 = require('eventemitter3');
 var NiceEmitter03 = require('nice-emitter');
@@ -1307,6 +1371,8 @@ addTestNice('NE', function addRemoveThird () {
     ne.on('foo', baz2);
 });
 
+// If emitter must respect subscribers order AND it uses an array (with "holes")
+// then this test makes the array grow until a reorg (compact) operation is done.
 addTestStandard(function addRemoveCrossed () {
     ee.on('foo', baz);
     ee.removeListener('foo', bar);
@@ -1621,7 +1687,7 @@ function createDom() {
 
     createDiv(document.body, 'title', 'nice-emitter Benchmark');
     createDiv(document.body, 'infos', 'EE3 = EventEmitter3');
-    createDiv(document.body, 'infos', 'NE = nice-emitter');
+    createDiv(document.body, 'infos', 'NE = nice-emitter (Quick = using a quick emitter)');
     createDiv(document.body, 'infos', 'Each test runs 3 times.');
 
     logDiv = createDiv(document.body, 'logDiv');
@@ -1675,11 +1741,24 @@ function logLine (result) {
 }
 
 function log () {
-    var msg = [].join.call(arguments, ' ');
+    var msg = Array.prototype.join.call(arguments, ' ');
     browserConsoleLog(msg);
     var div = createDiv(logDiv, 'logLine', msg);
     scrollToBottom();
     return div;
+}
+
+function logError (e) {
+    var stack = (e && e.stack) || '' + e;
+    var stackLines = stack.split(/\n|\r\n/);
+
+    console.error(stack);
+
+    for (var i = 0; i <= 2; i++) {
+        var className = i === 0 ? 'logLine error' : 'logLine';
+        createDiv(logDiv, className, stackLines[i]);
+    }
+    scrollToBottom();
 }
 
 function scrollToBottom () {
@@ -1701,30 +1780,30 @@ var subStep = 0;
 
 function runOneStep () {
     if (subStep === 0) logSection(stepNames[step]);
-    var result;
+    var result = null;
 
-    switch (step) {
-    case 0:
-        result = runBenchmark(subStep++, /*isProd=*/false);
-        if (result !== null) {
-            logLine(result);
-        } else {
-            step++;
-            subStep = 0;
+    try {
+        switch (step) {
+        case 0:
+            result = runBenchmark(subStep++, /*isProd=*/false);
+            break;
+        case 1:
+            result = runBenchmark(subStep++, /*isProd=*/true);
+            break;
+        case 2:
+            runTest(function done () {});
+            return; // nothing else to schedule
         }
-        break;
-    case 1:
-        result = runBenchmark(subStep++, /*isProd=*/true);
-        if (result !== null) {
-            logLine(result);
-        } else {
-            step++;
-            subStep = 0;
-        }
-        break;
-    case 2:
-        runTest();
-        return; // stop here
+    } catch (e) {
+        logError(e);
+        return; // abort tests
+    }
+
+    if (result !== null) {
+        logLine(result);
+    } else {
+        step++;
+        subStep = 0;
     }
     setTimeout(runOneStep, 50);
 }
@@ -2453,6 +2532,7 @@ function getAsText (emitter, eventId, listener) {
 }
 
 },{}],10:[function(require,module,exports){
+(function (process){
 var EventEmitter = require('../index.js');
 var inherits = require('util').inherits;
 
@@ -2556,6 +2636,9 @@ var hearingRecord = '';
 Ear.prototype.onSignal1 = function () {
     this.count++;
     hearingRecord += '#' + this.id;
+    if (arguments.length >= 1) {
+        hearingRecord += '(' + Array.prototype.concat.apply([], arguments).join() + ')';
+    }
 };
 
 function checkHearing (expected) {
@@ -2654,7 +2737,7 @@ function slowEmitErrorTest () {
     signaler.off('signalXXX', 'A');
     checkConsole('Invalid event ID: MySignaler.on(\'signalXXX\', fn, A)');
     signaler.off('signal1');
-    checkConsole('Invalid parameter to emitter.off: \'signal1\', undefined');
+    checkConsole('Invalid parameter to emitter.off \'signal1\': undefined');
 
     EventEmitter.setDebugLevel(EventEmitter.DEBUG_THROW);
     signaler.setListenerMaxCount(2, 'A');
@@ -3042,6 +3125,59 @@ function compactListTest () {
     EventEmitter.respectSubscriberOrder(false);
 }
 
+function onceTest (done) {
+    EventEmitter.setDebugLevel(EventEmitter.DEBUG_THROW);
+    var signaler = new MySignaler();
+    var ear1 = new Ear(1), ear2 = new Ear(2), ear3 = new Ear(3);
+    var fn2 = ear2.onSignal1.bind(ear2); // old style binding
+    var fn3 = ear3.onSignal1.bind(ear3); // old style binding
+
+    signaler.once('signal1', fn2);
+    signaler.off('signal1', fn2); // coverage: removal of single function
+
+    signaler.once('signal1', fn3);
+    signaler.off('signal1', fn2); // coverage: removal of unknown function when 1 active
+    signaler.off('signal1', fn3);
+    signaler.off('signal1', fn3); // coverage: removal of unknown function when 0 active
+
+    signaler.once('signal1', Ear.prototype.onSignal1, ear1);
+    checkResult(true, signaler.emit('signal1', 'hi', 'ho'));
+    checkResult(false, signaler.emit('signal1'));
+    checkHearing('#1(hi,ho)');
+
+    signaler.on('signal1', Ear.prototype.onSignal1, ear1);
+    signaler.once('signal1', fn2);
+    // ear3 below will be the 2nd Ear listening (Ear2 is listening through fn2 so signaler does not know Ear2)
+    signaler.setListenerMaxCount(2, ear1);
+    signaler.once('signal1', Ear.prototype.onSignal1, ear3);
+    checkResult(true, signaler.emit('signal1', 'hi'));
+    checkResult(true, signaler.emit('signal1'));
+    checkHearing('#1(hi)#2(hi)#3(hi)#1');
+
+    signaler.once('signal1', fn2);
+    // This time we will have 2 functions listening to same eventId, so we need to increase the max for that:
+    signaler.setMaxListeners(2);
+    signaler.once('signal1', fn3);
+    signaler.off('signal1', ear2); // does nothing of course
+    checkResult(true, signaler.emit('signal1'));
+    checkResult(true, signaler.emit('signal1'));
+    checkHearing('#1#2#3#1');
+
+    signaler.once('signal1', fn2);
+    signaler.once('signal1', fn3);
+    signaler.off('signal1', fn2);
+    checkResult(true, signaler.emit('signal1'));
+    checkResult(true, signaler.emit('signal1'));
+    checkHearing('#1#3#1');
+    signaler.off('signal1', fn2); // ignored: removed of already fired "once"
+
+    signaler.once('signal1', Ear.prototype.onSignal1, ear2);
+    setTimeout(function () {
+        checkConsole('emitter.once \'signal1\' was not called before 5000ms timeout');
+        done();
+    }, 6000);
+}
+
 
 //---
 
@@ -3087,9 +3223,7 @@ function checkResult (expected, result) {
     if (result !== expected) throw new Error('Wrong result:\n' + result + '\ninstead of:\n' + expected);
 }
 
-function runTest () {
-    rerouteConsole();
-
+function runSyncTests () {
     basicTest();
     slowEmitErrorTest();
     quickEmitErrorTest();
@@ -3106,10 +3240,30 @@ function runTest () {
     EventEmitter.setDebugLevel(EventEmitter.NO_DEBUG);
     slowEmitTest();
     quickEmitTest();
+}
 
-    checkConsole(undefined); // catch any missed console error here
+function runAsyncTests (done) {
+    onceTest(done);
+}
 
-    console.log('Emitter test completed.');
+/**
+ * Runs our tests (async)
+ *
+ * @param {function} [done] - optional if Node.js run; otherwise called when tests finished with success
+ */
+function runTest (done) {
+    rerouteConsole();
+
+    runSyncTests();
+
+    runAsyncTests(function finish () {
+        checkConsole(undefined); // catch any missed console error here
+
+        console.log('Emitter test completed.');
+
+        if (!done) process.exit(0);
+        done();
+    });
 }
 
 if (typeof window === 'undefined') {
@@ -3118,4 +3272,5 @@ if (typeof window === 'undefined') {
     exports.runTest = runTest;
 }
 
-},{"../index.js":1,"util":5}]},{},[7]);
+}).call(this,require('_process'))
+},{"../index.js":1,"_process":3,"util":5}]},{},[7]);

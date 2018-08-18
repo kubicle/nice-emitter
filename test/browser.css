@@ -35,6 +35,9 @@ body {
 .logLine.ref {
     color: #bbb;
 }
+.logLine.error {
+    color: #c00;
+}
 .logLine.warning {
     color: #dea166;
 }
