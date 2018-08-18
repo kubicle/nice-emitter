@@ -148,7 +148,11 @@ EventEmitter.prototype.off = function (eventId, listener) {
     if (typeof listener === 'function') {
         // Old API compatibility
         var indexFn = listenerList._findMethod(listener);
-        if (indexFn !== -1) listenerList._removeListener(indexFn, null);
+        if (indexFn !== -1) {
+            listenerList._removeListener(indexFn, null);
+        } else if (listener._hasNiceEmitterOnce) {
+            this._removeOnceListener(listenerList, listener);
+        }
     } else {
         var index = listenerList._findListener(listener);
         if (index !== -1) {
@@ -159,6 +163,65 @@ EventEmitter.prototype.off = function (eventId, listener) {
     }
 };
 EventEmitter.prototype.removeListener = EventEmitter.prototype.off;
+
+/**
+ * Old API compatibility
+ * @deprecated `once` is not your friend.
+ * @param {string} eventId
+ * @param {function} method - can be a simple function too
+ * @param {object|string|undefined} listener - if not passed, emitter will be passed as context when event occurs
+ * @param {number} [timeoutMs] - if not passed, a "human-debugging" value of 5 seconds will be used
+ */
+EventEmitter.prototype.once = function (eventId, method, listener, timeoutMs) {
+    method._hasNiceEmitterOnce = true;
+
+    timeoutMs = timeoutMs || 5000;
+    var timeout = setTimeout(function () {
+        console.error('emitter.once \'' + eventId + '\' was not called before ' + timeoutMs + 'ms timeout');
+    }, timeoutMs);
+
+    var emitter = this;
+    function hopFunc () {
+        if (listener) {
+            emitter.off(eventId, listener);
+        } else {
+            emitter.off(eventId, hopFunc);
+        }
+        clearTimeout(timeout);
+
+        method.apply(this, arguments); // "this" and arguments will be passed correctly by emitter
+    }
+    hopFunc._timeout = timeout;
+    hopFunc._method = method;
+
+    if (listener) {
+        this.on(eventId, hopFunc, listener);
+    } else {
+        this.on(eventId, hopFunc);
+    }
+};
+
+// Only used when caller does `emitter.off(eventId, func)` of a previously `emitter.once(eventId, func)`
+EventEmitter.prototype._removeOnceListener = function (listenerList, method) {
+    var hopFunc, indexFn = -1;
+    var methods = listenerList._methods;
+    if (methods === null) return; // not listening; safe to ignore
+    if (typeof methods === 'function') {
+        if (methods._method === method) hopFunc = methods; // indexFn not needed here
+    } else {
+        for (var i = 0; i < methods.length; i++) {
+            var m = methods[i];
+            if (m && m._method === method) {
+                hopFunc = m;
+                indexFn = i;
+                break;
+            }
+        }
+    }
+    if (!hopFunc) return; // happens if "once" has already fired before being removed; safe to ignore
+    listenerList._removeListener(indexFn, null);
+    clearTimeout(hopFunc._timeout);
+}
 
 /**
  * Unsubscribes the given listener (context) from all events of this emitter

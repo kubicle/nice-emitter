@@ -101,6 +101,9 @@ var hearingRecord = '';
 Ear.prototype.onSignal1 = function () {
     this.count++;
     hearingRecord += '#' + this.id;
+    if (arguments.length >= 1) {
+        hearingRecord += '(' + Array.prototype.concat.apply([], arguments).join() + ')';
+    }
 };
 
 function checkHearing (expected) {
@@ -587,6 +590,59 @@ function compactListTest () {
     EventEmitter.respectSubscriberOrder(false);
 }
 
+function onceTest (done) {
+    EventEmitter.setDebugLevel(EventEmitter.DEBUG_THROW);
+    var signaler = new MySignaler();
+    var ear1 = new Ear(1), ear2 = new Ear(2), ear3 = new Ear(3);
+    var fn2 = ear2.onSignal1.bind(ear2); // old style binding
+    var fn3 = ear3.onSignal1.bind(ear3); // old style binding
+
+    signaler.once('signal1', fn2);
+    signaler.off('signal1', fn2); // coverage: removal of single function
+
+    signaler.once('signal1', fn3);
+    signaler.off('signal1', fn2); // coverage: removal of unknown function when 1 active
+    signaler.off('signal1', fn3);
+    signaler.off('signal1', fn3); // coverage: removal of unknown function when 0 active
+
+    signaler.once('signal1', Ear.prototype.onSignal1, ear1);
+    checkResult(true, signaler.emit('signal1', 'hi', 'ho'));
+    checkResult(false, signaler.emit('signal1'));
+    checkHearing('#1(hi,ho)');
+
+    signaler.on('signal1', Ear.prototype.onSignal1, ear1);
+    signaler.once('signal1', fn2);
+    // ear3 below will be the 2nd Ear listening (Ear2 is listening through fn2 so signaler does not know Ear2)
+    signaler.setListenerMaxCount(2, ear1);
+    signaler.once('signal1', Ear.prototype.onSignal1, ear3);
+    checkResult(true, signaler.emit('signal1', 'hi'));
+    checkResult(true, signaler.emit('signal1'));
+    checkHearing('#1(hi)#2(hi)#3(hi)#1');
+
+    signaler.once('signal1', fn2);
+    // This time we will have 2 functions listening to same eventId, so we need to increase the max for that:
+    signaler.setMaxListeners(2);
+    signaler.once('signal1', fn3);
+    signaler.off('signal1', ear2); // does nothing of course
+    checkResult(true, signaler.emit('signal1'));
+    checkResult(true, signaler.emit('signal1'));
+    checkHearing('#1#2#3#1');
+
+    signaler.once('signal1', fn2);
+    signaler.once('signal1', fn3);
+    signaler.off('signal1', fn2);
+    checkResult(true, signaler.emit('signal1'));
+    checkResult(true, signaler.emit('signal1'));
+    checkHearing('#1#3#1');
+    signaler.off('signal1', fn2); // ignored: removed of already fired "once"
+
+    signaler.once('signal1', Ear.prototype.onSignal1, ear2);
+    setTimeout(function () {
+        checkConsole('emitter.once \'signal1\' was not called before 5000ms timeout');
+        done();
+    }, 6000);
+}
+
 
 //---
 
@@ -632,9 +688,7 @@ function checkResult (expected, result) {
     if (result !== expected) throw new Error('Wrong result:\n' + result + '\ninstead of:\n' + expected);
 }
 
-function runTest () {
-    rerouteConsole();
-
+function runSyncTests () {
     basicTest();
     slowEmitErrorTest();
     quickEmitErrorTest();
@@ -651,10 +705,30 @@ function runTest () {
     EventEmitter.setDebugLevel(EventEmitter.NO_DEBUG);
     slowEmitTest();
     quickEmitTest();
+}
 
-    checkConsole(undefined); // catch any missed console error here
+function runAsyncTests (done) {
+    onceTest(done);
+}
 
-    console.log('Emitter test completed.');
+/**
+ * Runs our tests (async)
+ *
+ * @param {function} [done] - optional if Node.js run; otherwise called when tests finished with success
+ */
+function runTest (done) {
+    rerouteConsole();
+
+    runSyncTests();
+
+    runAsyncTests(function finish () {
+        checkConsole(undefined); // catch any missed console error here
+
+        console.log('Emitter test completed.');
+
+        if (!done) process.exit(0);
+        done();
+    });
 }
 
 if (typeof window === 'undefined') {
