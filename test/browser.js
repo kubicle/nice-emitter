@@ -4,7 +4,6 @@ var runBenchmark = require('./benchmark').runBenchmark;
 var runTest = require('./test').runTest;
 
 var logDiv;
-var browserConsoleLog;
 
 
 function createDom() {
@@ -40,9 +39,12 @@ function createDiv (parent, className, txt) {
     return div;
 }
 
-function redirectConsole () {
-    browserConsoleLog = console.log;
-    console.log = log;
+function logLine (msg) {
+    console.log(msg);
+
+    var div = createDiv(logDiv, 'logLine', msg);
+    scrollToBottom();
+    return div;
 }
 
 function logSection (title) {
@@ -50,8 +52,8 @@ function logSection (title) {
     scrollToBottom();
 }
 
-function logLine (result) {
-    var line = log(result.msg);
+function logResult (result) {
+    var line = logLine(result.msg);
     var className;
     if (result.factor === 0) { // factor is 0 for EE3
         className = 'ref';
@@ -65,39 +67,27 @@ function logLine (result) {
     line.className += ' ' + className;
 }
 
-function log () {
-    var msg = Array.prototype.join.call(arguments, ' ');
-    browserConsoleLog(msg);
-    var div = createDiv(logDiv, 'logLine', msg);
-    scrollToBottom();
-    return div;
-}
-
 function logError (e) {
-    logSection('logError')
-    logSection('error: ' + e)
-    logSection('stack: ' + e.stack)
-
-    var stack = (e && e.stack) || '' + e;
+    var msg = '' + e;
+    var stack = (e && e.stack) || '';
     var stackLines = stack.split(/\n|\r\n/);
 
+    console.error(msg);
     console.error(stack);
 
-    for (var i = 0; i <= 2; i++) {
-        var className = i === 0 ? 'logLine error' : 'logLine';
-        createDiv(logDiv, className, stackLines[i]);
+    createDiv(logDiv, 'logLine error', msg);
+    for (var i = 0; i <= 3; i++) {
+        createDiv(logDiv, 'logLine', stackLines[i]);
     }
     scrollToBottom();
 }
 
 function scrollToBottom () {
-    // logDiv.scrollTop = logDiv.scrollHeight;
+    logDiv.scrollTop = logDiv.scrollHeight;
 };
 
 function runItAll () {
     createDom();
-
-    redirectConsole();
 
     // NB: code in test.js will for sure de-optimize nice-emitter, so we MUST run benchmark.js first
     setTimeout(runOneStep, 100);
@@ -125,7 +115,7 @@ function runOneStep () {
         }
 
         if (result !== null) {
-            logLine(result);
+            logResult(result);
         } else {
             step++;
             subStep = 0;
