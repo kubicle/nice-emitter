@@ -136,15 +136,14 @@ The paragraphs below should help you answer the question:
 In most cases the answer should be "YES!" and I believe you will not regret this change.
 
 ### What is not implemented
-Several of these are also not handled by [EventEmitter3](https://github.com/primus/eventemitter3). The most important one is maybe `once`, which was left-out voluntarily.
+Several of these are also not handled by [EventEmitter3](https://github.com/primus/eventemitter3).
 
 In alphabetical order:
 - `defaultMaxListeners`: this "max listeners" counting system is one of the reason why Node's EventEmitter is so clumsy to detect leaks. See how our `setListenerMaxCount` is making this easier.
 - `getMaxListeners`: let me know why you need this.
 - `listeners`: curious to see who used this and why... Maybe internal API for Node.js?
-- `once`: I believe that `once` is an anti-pattern. I will try to find links about this and post them, or write myself why I think so. A close-future version of `nice-emitter` will implement a safer replacement for `once`, stay posted!
-- `prependListener`: oops, I did not know this exists before reading the doc again in details... If someone out there really needs it, it can be added without much effort.
-- `prependOnceListener`: see paragraph about `once` above.
+- `prependListener`: this API *could be* implemented, however... (a) relying on listener subscribing order is not a sign of a good design for your code, and (b) while you are relying on this order, starting to set one listener at beginning of the line seems like looking for more trouble. Maybe you need another way to manage the order of actions, a component dedicated to this goal (which is definitely not what event emitters were created for).
+- `prependOnceListener`: such an interesting animal, combining my worries about both ordering and `once`...
 - `rawListeners`: same remark as for `listeners` above.
 
 Special events:
@@ -153,8 +152,15 @@ Special events:
 
 ### What is different
 - `eventNames`: a bit too "dynamic"? You can use `listenerCount(eventId)` to see how many listeners for a given eventId. If you don't know which eventId you are interested in, you are probably in a kind of trouble already.
+- `once`: since version 0.5, `nice-emitter` implements a `once` [API](#once-api) that tries to mitigate the issue of unexpected delay or missing notification. Why only worry about it for `once` and not for `on`? Read more about it [below](#once-is-not-wait)...
 - `removeAllListeners`: who was supposed to call this API anyway? It looks more like a termination/cleanup method, to remove all dependencies before shutting down your app/system. If implemented later, should probably be named differently.
 - Order of event reception by listeners: Node.js guarantees that your listeners will receive events in the order in which they started listening. This is also true for `nice-emitter`, until you remove some of them and add others (or add them back). If you really need this order, now is a good time to ask yourself why, because your design should normally not rely on that. If you still want it this way, call `EventEmitter.respectSubscriberOrder(true)` and order will be kept, at the expense of a bit more CPU and memory.
+
+<a name="once-is-not-wait"></a>
+### "Once is not your friend"
+I believe that `once` is an anti-pattern. I could not find good article explaining this so here are my 2 cents: if you wanted *just to be notified once* then you could use the regular `on` and unsubscribe when your listener is called. I think the problem is more subtle and perhaps due in part to the English second meaning of the word "once": "as soon as". This encourages developers to use `once` as a way to *wait* for a given condition. From this misuse come all the issues I have seen so far: the original `once` API does not let you set a timeout, so you rarely find out when it took very long for your listener to be notified, or when this notification never came. If your app does not break from a missing notification, you can also end-up setting up a duplicate `once` listener later, and then good luck when the event comes... There is also no "error callback" that your emitter could use to notify that whatever you are waiting for failed on the way. The list goes on...
+
+What should be done, in short? Instead of using `once` to react to the readiness of a service, or similar event with variable delay and outcome, we should use a specific API/component. Event emitters are not designed for this at the moment, at least not with the current specification.
 
 ### New API
 See sample (above) and `test/test.js` for examples of how these are used.
@@ -174,6 +180,15 @@ If `listener` is passed, it will be passed as context (`this`) to the listening 
 This same context can also be used later to remove listeners with `off` (see below).
 Specifying your context when calling "on" is often much easier than having to track/store which functions you use to subscribe.
 If you pass a context, `nice-emitter` also checks that the same event ID is not already subscribed to with same context.
+Note that if `listener` is omitted, the context (`this`) passed to your listening function will be the EventEmitter (same as in Node.js).
+
+<a name="once-api"></a>
+#### once (eventId, method, listener, timeout)
+Similar to Node.js API expect there is ALWAYS a timeout. The default timeout is set to a "human-scale" duration to help you debug your code when broken, hence a few seconds only.
+If you are setting a "once" listener for an event that may-or-may-not come, you probably could use `on` without much trouble.
+Expiration of the timeout just logs a `console.error`, so in a way one could wonder what big difference it makes. Well, having to think each time about *"How long should it wait?"* and *"What happens when it does not come on time?"* will probably help you designing a more robust logic.
+The optional `listener` parameter works the same as in `on` (see above). If you really want the Node.js way, you should pass `undefined` here.
+See also my rant about why [once is not your friend](#once-is-not-wait).
 
 #### off (eventId, listener)
 Similar to Node.js API except that if second parameter is not a function, it must be the "context" or listener used when you called `on`.
