@@ -110,8 +110,10 @@ function runOneStep () {
             result = runBenchmark(subStep++, /*isProd=*/true);
             break;
         case 2:
-            runTest(function done () {});
-            return; // nothing else to schedule
+            runTest(function done () {
+                logLine('Completed.')
+            });
+            return; // last step => nothing else to schedule
         }
 
         if (result !== null) {

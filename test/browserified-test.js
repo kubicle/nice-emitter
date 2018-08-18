@@ -1786,7 +1786,7 @@ function runOneStep () {
             break;
         case 2:
             runTest(function done () {
-                logLine('Test completed.')
+                logLine('Completed.')
             });
             return; // last step => nothing else to schedule
         }
