@@ -74,6 +74,10 @@ function log () {
 }
 
 function logError (e) {
+    logSection('logError')
+    logSection('error: ' + e)
+    logSection('stack: ' + e.stack)
+
     var stack = (e && e.stack) || '' + e;
     var stackLines = stack.split(/\n|\r\n/);
 
@@ -87,7 +91,7 @@ function logError (e) {
 }
 
 function scrollToBottom () {
-    logDiv.scrollTop = logDiv.scrollHeight;
+    // logDiv.scrollTop = logDiv.scrollHeight;
 };
 
 function runItAll () {
