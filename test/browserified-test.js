@@ -1785,8 +1785,10 @@ function runOneStep () {
             result = runBenchmark(subStep++, /*isProd=*/true);
             break;
         case 2:
-            runTest(function done () {});
-            return; // nothing else to schedule
+            runTest(function done () {
+                logLine('Test completed.')
+            });
+            return; // last step => nothing else to schedule
         }
 
         if (result !== null) {
@@ -3242,7 +3244,7 @@ function runAsyncTests (done) {
 /**
  * Runs our tests (async)
  *
- * @param {function} [done] - optional if Node.js run; otherwise called when tests finished with success
+ * @param {function} done - called when tests finished with success
  */
 function runTest (done) {
     rerouteConsoleError();
@@ -3251,17 +3253,18 @@ function runTest (done) {
 
     runAsyncTests(function finish () {
         checkConsole(undefined); // catch any missed console error here
-
-        console.log('Emitter test completed.');
-
-        if (!done) process.exit(0);
         done();
     });
 }
 
 if (typeof window === 'undefined') {
-    runTest();
+    // Node.js (CLI, CI or coverage run)
+    runTest(function done () {
+        console.log('Emitter test completed.');
+        process.exit(0);
+    });
 } else {
+    // Run from browser
     exports.runTest = runTest;
 }
 
