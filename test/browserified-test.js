@@ -1749,6 +1749,10 @@ function log () {
 }
 
 function logError (e) {
+    logSection('logError')
+    logSection('error: ' + e)
+    logSection('stack: ' + e.stack)
+
     var stack = (e && e.stack) || '' + e;
     var stackLines = stack.split(/\n|\r\n/);
 
@@ -1762,7 +1766,7 @@ function logError (e) {
 }
 
 function scrollToBottom () {
-    logDiv.scrollTop = logDiv.scrollHeight;
+    // logDiv.scrollTop = logDiv.scrollHeight;
 };
 
 function runItAll () {
@@ -1779,10 +1783,10 @@ var step = 0;
 var subStep = 0;
 
 function runOneStep () {
-    if (subStep === 0) logSection(stepNames[step]);
-    var result = null;
-
     try {
+        if (subStep === 0) logSection(stepNames[step]);
+        var result = null;
+
         switch (step) {
         case 0:
             result = runBenchmark(subStep++, /*isProd=*/false);
@@ -1794,18 +1798,17 @@ function runOneStep () {
             runTest(function done () {});
             return; // nothing else to schedule
         }
+
+        if (result !== null) {
+            logLine(result);
+        } else {
+            step++;
+            subStep = 0;
+        }
+        setTimeout(runOneStep, 50);
     } catch (e) {
         logError(e);
-        return; // abort tests
     }
-
-    if (result !== null) {
-        logLine(result);
-    } else {
-        step++;
-        subStep = 0;
-    }
-    setTimeout(runOneStep, 50);
 }
 
 runItAll();
