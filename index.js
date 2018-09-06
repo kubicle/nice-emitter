@@ -21,7 +21,10 @@ EventEmitter.NO_DEBUG = 0;    // No checks except those that avoid crashes
 EventEmitter.DEBUG_ERROR = 1; // Debug checks; errors go to console.error
 EventEmitter.DEBUG_THROW = 2; // Debug checks; errors are thrown
 
-var debugLevel = EventEmitter.DEBUG_THROW;
+// Set default. NO_DEBUG if minified, DEBUG_THROW otherwise. (see above)
+var debugLevel = getObjectClassname(new EventEmitter()) !== 'EventEmitter'
+    ? EventEmitter.NO_DEBUG
+    : EventEmitter.DEBUG_THROW;
 
 /**
  * Sets debug level.
