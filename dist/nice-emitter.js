@@ -1,5 +1,6 @@
 (function(f){if(typeof exports==="object"&&typeof module!=="undefined"){module.exports=f()}else if(typeof define==="function"&&define.amd){define([],f)}else{var g;if(typeof window!=="undefined"){g=window}else if(typeof global!=="undefined"){g=global}else if(typeof self!=="undefined"){g=self}else{g=this}g.NiceEmitter = f()}})(function(){var define,module,exports;return (function(){function r(e,n,t){function o(i,f){if(!n[i]){if(!e[i]){var c="function"==typeof require&&require;if(!f&&c)return c(i,!0);if(u)return u(i,!0);var a=new Error("Cannot find module '"+i+"'");throw a.code="MODULE_NOT_FOUND",a}var p=n[i]={exports:{}};e[i][0].call(p.exports,function(r){var n=e[i][1][r];return o(n||r)},p,p.exports,r,e,n,t)}return n[i].exports}for(var u="function"==typeof require&&require,i=0;i<t.length;i++)o(t[i]);return o}return r})()({1:[function(require,module,exports){
 'use strict';
+
 /**
  * Nice EventEmitter
  * - more object-friendly: listeners can be objects (i.e. no need to "bind" on listening methods)
@@ -18,20 +19,37 @@ function EventEmitter () {
 module.exports = EventEmitter;
 
 
-EventEmitter.NO_DEBUG = 0;    // No checks except those that avoid crashes
-EventEmitter.DEBUG_ERROR = 1; // Debug checks; errors go to console.error
-EventEmitter.DEBUG_THROW = 2; // Debug checks; errors are thrown
-
-var debugLevel = EventEmitter.DEBUG_THROW;
+// Debug levels
 
 /**
- * Sets debug level.
- * Default debug mode is DEBUG_THROW - helps you debug your code by crashing.
- * DEBUG_ERROR is a good choice for production code.
- * NO_DEBUG can *sometimes* give you a bit of extra speed - but should you really be emitting that much?
- * NO_DEBUG also saves some memory - if you really create a huge number of emitters...
+ * Debug checks & counting. Errors are thrown. Helps you debug your code by crashing early.
+ * This is the default level, except if code is minified.
+ */
+EventEmitter.DEBUG_THROW = 2;
+
+/**
+ * Debug checks & counting. Errors go to `console.error` but execution continues as normally as possible.
+ */
+EventEmitter.DEBUG_ERROR = 1;
+
+/**
+ * No counting, no checks except those that avoid crashes.
+ * The fastest level, with minimum memory usage.
+ * If your code is minified, NO_DEBUG is automatically the default (no need to call `setDebugLevel`).
+ * NB: counting based on class names would have issues when 2 minified classes end-up with the same name.
+ */
+EventEmitter.NO_DEBUG = 0;
+
+
+// Set default. NO_DEBUG if minified, DEBUG_THROW otherwise. (see above)
+var debugLevel = getObjectClassname(new EventEmitter()) !== 'EventEmitter'
+    ? EventEmitter.NO_DEBUG
+    : EventEmitter.DEBUG_THROW;
+
+/**
+ * Sets debug level. See comments about debug levels.
  *
- * @param {number} level - e.g. EventEmitter.DEBUG_ERROR (console.error messages) or EventEmitter.NO_DEBUG
+ * @param {number} level - EventEmitter.NO_DEBUG, EventEmitter.DEBUG_ERROR, or EventEmitter.DEBUG_THROW
  */
 EventEmitter.setDebugLevel = function (level) {
     debugLevel = level;
@@ -39,6 +57,12 @@ EventEmitter.setDebugLevel = function (level) {
 
 var respectSubscriberOrder = false;
 
+/**
+ * Forces listener to be notified in the order in which they subscribed, at the expense of a bit more CPU and memory.
+ * By default his order is not guaranteed.
+ *
+ * @param {boolean} shouldRespect
+ */
 EventEmitter.respectSubscriberOrder = function (shouldRespect) {
     respectSubscriberOrder = shouldRespect;
 };
@@ -48,7 +72,7 @@ EventEmitter.respectSubscriberOrder = function (shouldRespect) {
 
 /**
  * Declares an event for this emitter.
- * Event must be declared before emit, on, or any other event-related method is called for this event.
+ * Event must be declared before `emit`, `on`, or other method is called for this event ID.
  *
  * @param {string} eventId
  */
@@ -60,6 +84,16 @@ EventEmitter.prototype.declareEvent = function (eventId) {
     this._listenersPerEventId[eventId] = new ListenerList(this, eventId);
 };
 
+/**
+ * Notifies each listener which subscribed to given eventId.
+ * Optional parameters are passed.
+ *
+ * @param {string} eventId
+ * @param {*} [p1]
+ * @param {*} [p2]
+ * @param {*} [p3] - there can be more than 3 parameters
+ * @returns {boolean} false if no listeners are registered.
+ */
 EventEmitter.prototype.emit = function (eventId, p1, p2, p3) {
     var listenerList = this._listenersPerEventId[eventId];
     if (listenerList === undefined) {
@@ -97,7 +131,7 @@ EventEmitter.prototype.getQuickEmitter = function (eventId) {
  * @param {string} eventId
  * @returns {number} number of listeners on this specific event
  */
-EventEmitter.prototype.listenerCount = function listenerCount (eventId) {
+EventEmitter.prototype.listenerCount = function (eventId) {
     var listenerList = this._listenersPerEventId[eventId];
     if (listenerList === undefined) {
         return throwOrConsole('Undeclared event ID for ' + getObjectClassname(this) + ': ', eventId);
@@ -171,7 +205,8 @@ EventEmitter.prototype.removeListener = EventEmitter.prototype.off;
  * @param {string} eventId
  * @param {function} method - can be a simple function too
  * @param {object|string|undefined} listener - if not passed, emitter will be passed as context when event occurs
- * @param {number} [timeoutMs] - if not passed, a "human-debugging" value of 5 seconds will be used
+ * @param {number} [timeoutMs] - if not passed, a "human-debugging" value of 5 seconds will be used.
+ *                               If timeout expires before the event occurs, a simple console.error is logged.
  */
 EventEmitter.prototype.once = function (eventId, method, listener, timeoutMs) {
     method._hasNiceEmitterOnce = true;
@@ -236,8 +271,10 @@ EventEmitter.prototype.forgetListener = function (listener) {
 };
 
 /**
- * Sets the limit listener count for this emitter and listener class objects.
+ * Sets the limit per event ID of listeners for this emitter and listener class objects.
  * Default is 1 for all classes when this API is not called.
+ * If the maximum is reached, an error is thrown or logged.
+ * Does nothing if debug level is NO_DEBUG.
  *
  * @param {number} maxCount
  * @param {object|string} listener
@@ -250,7 +287,15 @@ EventEmitter.prototype.setListenerMaxCount = function (maxCount, listener) {
     this._maxCountPerListenerKey[getObjectClassname(listener)] = maxCount;
 };
 
-// Old API compatibility
+/**
+ * Old API compatibility.
+ * Sets a maximum count (default is 1) of listeners that can subscribe to 1 event ID.
+ * This limit applies when `on` or `addListener` are called without `listener` parameter.
+ * If the maximum is reached, an error is thrown or logged.
+ * Does nothing if debug level is NO_DEBUG.
+ *
+ * @param {number} maxCount
+ */
 EventEmitter.prototype.setMaxListeners = function (maxCount) {
     if (debugLevel === 0) return;
     if (!(maxCount > 0) || arguments.length > 1) {
