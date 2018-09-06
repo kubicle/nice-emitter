@@ -1,6 +1,6 @@
 {
     "name": "nice-emitter",
-    "version": "0.5.0",
+    "version": "0.6.0",
     "description": "Yet another EventEmitter, but with features to help you get things right.",
     "main": "index.js",
     "types": "index.d.ts",
