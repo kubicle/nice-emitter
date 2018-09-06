@@ -158,7 +158,10 @@ Special events:
 
 <a name="once-is-not-wait"></a>
 ### "Once is not your friend"
-I believe that `once` is an anti-pattern. I could not find good article explaining this so here are my 2 cents: if you wanted *just to be notified once* then you could use the regular `on` and unsubscribe when your listener is called. I think the problem is more subtle and perhaps due in part to the English second meaning of the word "once": "as soon as". This encourages developers to use `once` as a way to *wait* for a given condition. From this misuse come all the issues I have seen so far: the original `once` API does not let you set a timeout, so you rarely find out when it took very long for your listener to be notified, or when this notification never came. If your app does not break from a missing notification, you can also end-up setting up a duplicate `once` listener later, and then good luck when the event comes... There is also no "error callback" that your emitter could use to notify that whatever you are waiting for failed on the way. The list goes on...
+I believe that `once` is an anti-pattern. I could not find good article explaining this so here are my 2 cents: if you wanted *just to be notified once* then you could use the regular `on` and unsubscribe when your listener is called. I think the problem is more subtle and perhaps due in part to the English second meaning of the word "once": "as soon as". This encourages developers to use `once` as a way to *wait* for a given condition. From this misuse come all the issues I have seen so far:
+- The original `once` API does not let you set a timeout, so you rarely find out when it took very long for your listener to be notified, or when this notification never came.
+- If your app does not break from a missing notification, you can also end-up setting up a duplicate `once` listener later, and then good luck when the event comes...
+- When you wait for something important, instead of a timeout, you might also need an "error callback" so you can be notified that whatever you are waiting for failed for good.
 
 What should be done, in short? Instead of using `once` to react to the readiness of a service, or similar event with variable delay and outcome, we should use a specific API/component. Event emitters are not designed for this at the moment, at least not with the current specification.
 
@@ -204,10 +207,6 @@ NB: you can pass any instance of listener's class.
 
 #### EventEmitter.setDebugLevel (level)
 Sets debug level. `level` must be one of:
-- `EventEmitter.DEBUG_THROW`: Debug checks; errors are thrown
-- `EventEmitter.DEBUG_ERROR`: Debug checks; errors go to `console.error`
-- `EventEmitter.NO_DEBUG`: No checks except those that avoid crashes
-
-Default debug mode is `DEBUG_THROW` - helps you debug your code by crashing early when something is wrong.
-`DEBUG_ERROR` is a good choice for production code (remember to overwrite `console.error`).
-`NO_DEBUG` can *sometimes* give you a bit of extra speed - but should you really be emitting that much? `NO_DEBUG` also saves some memory, if you really create a huge number of emitters.
+- `EventEmitter.DEBUG_THROW`: Debug checks & counting. Errors are thrown. Helps you debug your code by crashing early. This is the default level, except if code is minified.
+- `EventEmitter.DEBUG_ERROR`: Debug checks & counting. Errors go to `console.error` but execution continues as normally as possible.
+- `EventEmitter.NO_DEBUG`: No counting, no checks except those that avoid crashes. The fastest level, with minimum memory usage. If your code is minified, NO_DEBUG is automatically the default (no need to call `setDebugLevel`).
