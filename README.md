@@ -3,7 +3,7 @@
 
 Finally an EventEmitter that does what I want... and maybe what *you* want too...
 
-- often faster than many existing event emitters: benchmarked against [EventEmitter3](https://github.com/primus/eventemitter3), one of the fastest. Try it [in your browser](https://rawgit.com/kubicle/nice-emitter/master/test/index.html)!
+- often faster than many existing event emitters: benchmarked against [EventEmitter3](https://github.com/primus/eventemitter3), one of the fastest. Try it [in your browser](https://kubicle.github.io/nice-emitter/test/)!
 - more object-friendly: listeners can be objects - no need to "bind" on listening methods anymore.
 - you can stop listening "per listener": no more need to store each listener function so you can remove it later.
 - helps you find leaks: debug counting allows each "class" of listeners to set its own maximum number.
