@@ -738,7 +738,7 @@ module.exports = function isBuffer(arg) {
     && typeof arg.readUInt8 === 'function';
 }
 },{}],5:[function(require,module,exports){
-(function (process,global){
+(function (process,global){(function (){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -1326,9 +1326,9 @@ function hasOwnProperty(obj, prop) {
   return Object.prototype.hasOwnProperty.call(obj, prop);
 }
 
-}).call(this,require('_process'),typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
+}).call(this)}).call(this,require('_process'),typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
 },{"./support/isBuffer":4,"_process":3,"inherits":2}],6:[function(require,module,exports){
-(function (process){
+(function (process){(function (){
 /**
  * This simple benchmark is measuring nice-emitter against EventEmitter3 (EE3),
  * using a subset of EE3's own benchmark.
@@ -1716,7 +1716,7 @@ if (typeof window === 'undefined') {
     exports.runBenchmark = runBenchmark;
 }
 
-}).call(this,require('_process'))
+}).call(this)}).call(this,require('_process'))
 },{"../index.js":1,"_process":3,"eventemitter3":8,"nice-emitter":9}],7:[function(require,module,exports){
 'use strict';
 
@@ -2572,7 +2572,7 @@ function getAsText (emitter, eventId, listener) {
 }
 
 },{}],10:[function(require,module,exports){
-(function (process){
+(function (process){(function (){
 var EventEmitter = require('../index.js');
 var inherits = require('util').inherits;
 
@@ -3313,5 +3313,5 @@ if (typeof window === 'undefined') {
     exports.runTest = runTest;
 }
 
-}).call(this,require('_process'))
+}).call(this)}).call(this,require('_process'))
 },{"../index.js":1,"_process":3,"util":5}]},{},[7]);
